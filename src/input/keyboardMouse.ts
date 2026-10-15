@@ -62,6 +62,15 @@ export class KeyboardInput {
       case 'KeyH':
         this.actions.toggleHelp();
         break;
+      case 'KeyO':
+        this.actions.cockpitSwitch('ap');
+        break;
+      case 'KeyN':
+        this.actions.cockpitSwitch('landing');
+        break;
+      case 'KeyK':
+        this.actions.autoStart();
+        break;
       case 'Escape':
         this.actions.toggleMenu();
         break;

@@ -31,13 +31,21 @@ export class Hud {
       `Höhe    ${pad(ac.altitudeFt)} ft`,
       `Steigen ${pad(ac.verticalSpeedFpm)} ft/min`,
       `Kurs    ${pad(ac.headingDeg)} °`,
-      ac.type.id === 'jet'
-        ? `Gas     ${pad(c.throttle * 100)} %   N1 ${pad(ac.engine.rpm, 3)} %`
-        : `Gas     ${pad(c.throttle * 100)} %   ${pad(ac.engine.rpm, 4)} rpm`,
+      ac.type.sound === 'jet'
+        ? `Gas     ${pad(c.throttle * 100)} %   N1 ${pad(ac.engine.rpm, 3)} %${(ac.engine as { reheat?: boolean }).reheat ? '  NACHBRENNER' : ''}`
+        : ac.type.sound === 'turboprop'
+          ? `Gas     ${pad(c.throttle * 100)} %   TQ ${pad(ac.engine.rpm, 3)} %`
+          : ac.type.sound === 'glider'
+            ? `Segelflug – kein Motor`
+            : `Gas     ${pad(c.throttle * 100)} %   ${pad(ac.engine.rpm, 4)} rpm`,
       `Klappen ${pad(ac.flaps * ac.type.flapDegrees)} °${ac.type.retractableGear ? `   Fahrwerk ${ac.gear > 0.98 ? 'unten' : ac.gear < 0.02 ? 'oben' : '…'}` : ''}`,
       `Trimm   ${pad(c.trim * 100)} %`,
       `AoA     ${pad((ac.aero.alpha * 180) / Math.PI)} °`,
       `Wind    ${wind}`,
+      ...(ac.systems.capacity > 0 ? [`Tank    ${pad(ac.systems.fuelFraction * 100)} %`] : []),
+      ...(ac.systems.ap.on
+        ? [`AP      ${ac.systems.ap.hdg ? `HDG ${String(ac.systems.ap.heading).padStart(3, '0')}` : 'ROLL'} ${ac.systems.ap.alt ? `ALT ${ac.systems.ap.altitudeFt}` : ''}`]
+        : []),
       `${pad(fps, 3)} fps`,
     ];
     if (status) lines.push('', status);
@@ -45,6 +53,9 @@ export class Hud {
     if (ac.stallWarning) html += '\n<span class="warn">STALL</span>';
     if (c.brake > 0) html += '\n<span class="warn">BREMSE</span>';
     if (ac.engine.failed) html += '\n<span class="warn">MOTOR AUS</span>';
+    else if (!ac.engine.running && ac.type.sound !== 'glider')
+      html += `\n<span class="warn">${ac.systems.starting ? 'ANLASSEN …' : 'MOTOR STEHT – K: anlassen'}</span>`;
+    if (ac.systems.parkBrake) html += '\n<span class="warn">PARKBREMSE</span>';
     this.hud.innerHTML = html;
   }
 }

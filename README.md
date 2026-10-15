@@ -10,17 +10,46 @@ und auf der Meta Quest 2 im Browser – mit greifbarem Steuerknüppel, Gashebel,
 | Option | Auswahl |
 |---|---|
 | Landschaft | Alpental · Fjordküste (Schären, steile Fjorde, Insel- und Fjordflugplatz) · New York (echtes Manhattan) |
-| Flugzeug | Cessna-artig (Kolbenmotor, festes Fahrwerk) · Jet-Trainer (L-39-artig, Einziehfahrwerk) |
+| Flugzeug | 10 Typen, siehe unten |
 | Mission | Freiflug · Luftstart · Landung (mit Wertung) · Ringparcours (Zeit) · Streckenflug zum zweiten Platz · Notwasserung im Hudson (New York) |
 | Wind | Ruhig · Leicht · Stark · Böig |
 | Wetter | Klar · Bewölkt · Regen (geschlossene Wolkendecke, Regen, schlechte Sicht) · Live (echte METAR von LaGuardia, nur New York) |
 | Tageszeit | Tag · Abend · Nacht (mit Pistenbefeuerung) |
 | Flugverhalten | Einfach · Realistisch (Propeller-Effekte, asymmetrischer Strömungsabriss, Trudeln) |
 | Motorausfall | Aus · Zufällig · Nach dem Start |
-| Komfort | Vignette, Sitzhöhe, Knüppelweg (VR) |
+| Flugverkehr | Aus · Normal · Viel – Platzrunden mit Touch-and-Go, Überlandflüge, in New York Airliner im Anflug auf LaGuardia |
+| Start am Boden | Motor läuft · Kalt & dunkel (Batterie, Pumpe, Zündung, Anlasser selbst schalten) |
+| Komfort | Vignette, Wackeln & Vibration, Sitzhöhe, Knüppelweg (VR) |
 
 Jede Landung wird bewertet (Sinkrate, Mittellinie, Aufsetzpunkt, Querlage, 0–3 Sterne).
 Neben jeder Schwelle zeigt ein **PAPI** den Gleitpfad: 2 weiß + 2 rot = richtig.
+
+### Flugzeuge
+
+| Typ | Besonderheit |
+|---|---|
+| Cessna (C172-artig) | Schulflugzeug, gutmütig |
+| Piper Cub | Spornrad (Seitenruder beim Rollen nötig!), Abheben bei ~40 kn |
+| Extra 300 | Kunstflug, > 250 °/s Rollrate, Spornrad |
+| Beech Baron | zweimotorig, Einziehfahrwerk |
+| DHC-2 Beaver | Wasserflugzeug auf Schwimmern – startet und landet auf dem Wasser |
+| Pilatus PC-12 | Turboprop mit Drehmomentanzeige, T-Leitwerk |
+| Segelflugzeug (ASK 21) | kein Motor, Bremsklappen auf dem Klappenhebel, Thermik und Hangaufwind, Variometer |
+| Jet-Trainer (L-39-artig) | Einziehfahrwerk, Startklappen |
+| A320 | Verkehrsflugzeug, braucht lange Pisten (LaGuardia) |
+| F-16 | Nachbrenner, HUD, G-Anzug (verträgt mehr G) |
+
+Die Tragflächen biegen sich mit der Last und schwingen bei Böen und auf der Piste nach. Unter hoher G-Last
+wird die Sicht grau bis schwarz (bei negativer G rot); Piste, Turbulenz und Buffeting vor dem Strömungsabriss
+rütteln Kopf, Knüppel (VR-Haptik) und Gamepad.
+
+### Cockpit
+
+Unter den Instrumenten liegt ein Schalterfeld: **BATT**, **PUMPE**, **ZÜND**, **START** (Anlasser),
+**NAV**-, **BCN**-, **STROBE**- und **LANDE**-Licht (mit echtem Lichtkegel bei Nacht), **PANEL**-Beleuchtung,
+**P-BREMS** (Parkbremse) sowie ein **Autopilot** mit Kurs- (HDG) und Höhenhaltung (ALT) und Wahlschaltern ±10° /
+±500 ft. Treibstoff wird verbraucht – ist der Tank leer, steht der Motor. Alle Schalter lassen sich am Desktop
+anklicken und in VR mit dem Finger drücken.
 
 ### New York
 
@@ -41,7 +70,8 @@ Tiles (AWS Open Data). Neu erzeugen: `node scripts/data/build-nyc.mjs <rohdaten-
 
 **Desktop:** `W`/`S` drücken/ziehen · `A`/`D` rollen · `Q`/`E` Seitenruder · `Shift`/`X` oder Mausrad Gas ·
 `B` Bremse · `F`/`V` Klappen · `G` Fahrwerk · `,`/`.` Trimmung · `C` Kamera · Maus ziehen umsehen ·
-`R` Neustart · `L` Luftstart · `P` Pause · `M` Ton · `H` Hilfe · `Esc` Menü
+`R` Neustart · `L` Luftstart · `P` Pause · `M` Ton · `H` Hilfe · `Esc` Menü ·
+`K` Motor anlassen · `O` Autopilot · `N` Landelicht
 
 **Cockpit (Desktop):** Gashebel, Klappenhebel, Fahrwerkshebel und die Trimmräder für Höhen-, Quer- und
 Seitenruder anklicken – links = mehr/runter/rechts, rechts = zurück.
@@ -83,14 +113,16 @@ Ohne WLAN-HTTPS geht es auf der Quest auch per USB: `adb reverse tcp:5173 tcp:51
 
 ## Aufbau
 
-- `src/sim` – 6-DOF-Flugphysik je Flugzeugtyp (`types.ts`): Aerodynamik mit Strömungsabriss, Trudeln und
-  Bodeneffekt, Kolbenmotor/Jet-Triebwerk, Fahrwerk (auch einziehbar), ISA-Atmosphäre; fester 120-Hz-Takt
+- `src/sim` – 6-DOF-Flugphysik je Flugzeugtyp (`types.ts`, 10 Typen): Aerodynamik mit Strömungsabriss, Trudeln,
+  Bodeneffekt und Mach-Widerstand, Kolbenmotor/Turboprop/Jet mit Nachbrenner, Fahrwerk (Bugrad, Spornrad,
+  Schwimmer, einziehbar), Bordsysteme und Autopilot (`systems.ts`), ISA-Atmosphäre; fester 120-Hz-Takt
 - `src/world` – Szenarien (`scenarios/`: Alpental, Fjordküste, New York), Gelände mit LOD-Chunks (Kollision exakt
   auf dem sichtbaren Mesh, inkl. Gebäude), Stadt, Flugplätze, PAPI, Befeuerung, Himmel/Tageszeiten, Wolken
-- `src/game` – Einstellungen, Wetter, Missionen, Landewertung, Ringparcours
+- `src/game` – Einstellungen, Wetter, Missionen, Landewertung, Ringparcours, KI-Flugverkehr (`traffic.ts`)
 - `src/cockpit` – Cockpit-Layouts, Instrumente, alle greif-/klickbaren Bedienelemente
 - `src/input` – Tastatur, Gamepad, VR-Controller, Maus-Klicks im Cockpit
-- `src/view`, `src/ui` – Flugzeugmodelle, Kameras, HUD, Vignette, Menüs
+- `src/view`, `src/ui` – Flugzeugmodelle aus dem Baukasten (`genericModel.ts`, mit Flügelbiegung und Lichtern),
+  Kameras, Flug-Gefühl (`feel.ts`: Rütteln, G-Effekte), HUD, Vignette, Menüs
 
 ## Deployment
 

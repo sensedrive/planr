@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { clamp, type ControlState, FLAP_STEPS, stepFlaps } from '../core/input';
 import type { CockpitLayout } from './layout';
+import type { SwitchId } from '../sim/systems';
+
+export type ButtonId = 'menu' | 'recenter' | SwitchId;
 
 export type HandleId = 'stick' | 'throttle' | 'flaps' | 'gear' | 'trimPitch' | 'trimRoll' | 'trimYaw';
 
@@ -21,7 +24,7 @@ export interface Handle {
 
 /** Push buttons for VR without controllers (tapped with the index finger) and for desktop clicks. */
 export interface CockpitButton {
-  id: 'menu' | 'recenter';
+  id: ButtonId;
   mesh: THREE.Mesh;
   /** aircraft coordinates */
   centre: THREE.Vector3;

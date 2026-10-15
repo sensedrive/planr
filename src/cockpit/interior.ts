@@ -111,7 +111,7 @@ export function buildCabin(g: THREE.Group, L: CockpitLayout, d: Dims): void {
   g.add(box(d.halfW * 2, roofY - d.floorY, 0.03, headliner, d.cx, (roofY + d.floorY) / 2, d.back));
   // overhead console with fresh-air vents and dome light
   g.add(rbox(0.16, 0.05, 0.5, 0.02, wall, d.cx, roofY - 0.02, roofFront + 0.32));
-  for (const x of [E.x, -E.x]) {
+  for (const x of Math.abs(E.x) > 0.1 ? [E.x, -E.x] : [E.x]) {
     const vent = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.04, 12), chrome);
     vent.position.set(x * 0.85, roofY - 0.02, E.z - 0.05);
     g.add(vent);
@@ -137,7 +137,7 @@ export function buildCabin(g: THREE.Group, L: CockpitLayout, d: Dims): void {
   g.add(lip);
   // fuel selector between the seats
   g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.02, 16), lambert(null, 0xb83020)).translateX(d.cx).translateY(d.floorY + 0.03).translateZ(E.z - 0.15));
-  for (const x of [E.x, -E.x]) seat(g, x, d, E.z, seatFabric, false);
+  for (const x of Math.abs(E.x) > 0.1 ? [E.x, -E.x] : [E.x]) seat(g, x, d, E.z, seatFabric, false);
   // rear bench
   g.add(rbox(1.0, 0.1, 0.45, 0.04, seatFabric, d.cx, d.floorY + 0.34, E.z + 1.15));
   g.add(rbox(1.0, 0.55, 0.1, 0.04, seatFabric, d.cx, d.floorY + 0.65, E.z + 1.42));

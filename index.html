@@ -26,12 +26,13 @@
       #message small { display: block; font-size: 14px; opacity: 0.8; margin-top: 6px; }
       body.xr #hud, body.xr #help, body.xr #message { display: none !important; }
       #menu {
-        position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px;
+        position: fixed; inset: 0; display: flex; padding: 16px;
         background: rgba(8, 12, 18, 0.45); backdrop-filter: blur(3px); z-index: 10; overflow: auto;
       }
       body.xr #menu { display: none !important; }
       #menu .card {
-        width: min(760px, 100%); background: rgba(14, 19, 26, 0.94); color: #e8eef4; border-radius: 16px;
+        /* margin:auto centres it but, unlike align-items, keeps the top reachable when it overflows */
+        margin: auto; width: min(760px, 100%); background: rgba(14, 19, 26, 0.94); color: #e8eef4; border-radius: 16px;
         padding: 22px 26px; box-shadow: 0 20px 60px rgba(0,0,0,0.4); box-sizing: border-box;
       }
       #menu h1 { margin: 0; font-size: 34px; letter-spacing: 0.5px; }
@@ -60,7 +61,7 @@
       <b>Steuerung</b><br />
       <kbd>W</kbd>/<kbd>S</kbd> drücken/ziehen · <kbd>A</kbd>/<kbd>D</kbd> rollen · <kbd>Q</kbd>/<kbd>E</kbd> Seitenruder<br />
       <kbd>Shift</kbd>/<kbd>X</kbd> oder Mausrad Gas · <kbd>B</kbd> Bremse · <kbd>F</kbd>/<kbd>V</kbd> Klappen · <kbd>G</kbd> Fahrwerk · <kbd>,</kbd>/<kbd>.</kbd> Trimmung<br />
-      Cockpit: Hebel, Trimmräder anklicken (links +, rechts −)<br />
+      Cockpit: Hebel, Trimmräder, Schalter anklicken (links +, rechts −) · <kbd>K</kbd> anlassen · <kbd>O</kbd> Autopilot · <kbd>N</kbd> Landelicht<br />
       <kbd>C</kbd> Kamera · Maus ziehen umsehen · <kbd>R</kbd> Neustart · <kbd>L</kbd> Luftstart · <kbd>P</kbd> Pause · <kbd>M</kbd> Ton · <kbd>H</kbd> Hilfe · <kbd>Esc</kbd> Menü
     </div>
     <div id="message"></div>

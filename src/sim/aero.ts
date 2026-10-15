@@ -44,7 +44,14 @@ export const C172_AERO = {
   // fraction of aileron / rudder reachable by their trim
   rollTrimRange: 0.3,
   yawTrimRange: 0.4,
+  /** critical Mach number: wave drag rises beyond it */
+  mcrit: 0.8,
 };
+
+/** Aerodynamics for another aircraft: C172 defaults overridden by the given coefficients. */
+export function makeAero(over: Partial<AeroParams> & Pick<AeroParams, 'S' | 'b' | 'c'>): AeroParams {
+  return { ...C172_AERO, ...over };
+}
 
 /** Jet trainer, loosely an Aero L-39. */
 export const JET_AERO: AeroParams = {
@@ -76,6 +83,7 @@ export const JET_AERO: AeroParams = {
   gearCD: 0.02,
   rollTrimRange: 0.25,
   yawTrimRange: 0.35,
+  mcrit: 0.78,
 };
 
 export interface AeroOut {
@@ -160,7 +168,9 @@ export function computeAero(
   const sa = Math.sin(alpha);
   const stallDrag = 1.2 * sa * sa * MathUtils.smoothstep(Math.abs(alpha), out.stallAngle - 3 * DEG, out.stallAngle + 5 * DEG);
   const sb = Math.sin(beta);
-  const CD = p.CD0 + p.flapCD * flaps + p.gearCD * gear + p.k * (1 - 2 * ge) * CL * CL + stallDrag + 0.5 * sb * sb;
+  const mach = V / 340;
+  const wave = mach > p.mcrit ? 1.4 * (mach - p.mcrit) ** 2 + (mach > 1 ? 0.02 : 0) : 0;
+  const CD = p.CD0 + p.flapCD * flaps + p.gearCD * gear + p.k * (1 - 2 * ge) * CL * CL + stallDrag + 0.5 * sb * sb + wave;
 
   vHat.copy(vBody).divideScalar(V);
   out.force.addScaledVector(vHat, -qS * CD);

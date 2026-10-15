@@ -29,6 +29,31 @@ function distance(m: number): string {
 }
 
 /** Start positions, goals, scoring and engine failures for the selectable missions. */
+/**
+ * Nearest stretch of open water to the home field with room for a floatplane take-off run:
+ * 700 m ahead, 100 m behind and 40 m to either side must all be water.
+ */
+function waterStart(restHeight: number): StartSpot | null {
+  const h = home();
+  const wet = (x: number, z: number) => surfaceHeight(x, z) < -1.5;
+  for (let r = 300; r <= 7000; r += 150) {
+    for (let a = 0; a < 360; a += 15) {
+      const x = h.center.x + Math.sin((a * Math.PI) / 180) * r;
+      const z = h.center.z - Math.cos((a * Math.PI) / 180) * r;
+      if (!wet(x, z)) continue;
+      for (let hd = 0; hd < 360; hd += 30) {
+        const fx = Math.sin((hd * Math.PI) / 180);
+        const fz = -Math.cos((hd * Math.PI) / 180);
+        let ok = true;
+        for (let d = -100; d <= 700 && ok; d += 50)
+          for (const side of [-40, 0, 40]) if (!wet(x + fx * d - fz * side, z + fz * d + fx * side)) ok = false;
+        if (ok) return { position: new THREE.Vector3(x, restHeight, z), heading: hd };
+      }
+    }
+  }
+  return null;
+}
+
 export class Missions {
   readonly course = new RingCourse();
   mission: MissionId = 'free';
@@ -67,24 +92,33 @@ export class Missions {
 
   private spotFor(id: MissionId): StartSpot {
     const t = this.aircraft.type;
-    const jet = t.id === 'jet';
+    const turbine = t.sound === 'jet' || t.sound === 'turboprop';
     const HOME = home();
+    // big aircraft line up a bit further down the runway so the tail is on the asphalt
+    const lineUp = Math.max(40, t.model.body.tailZ + 30);
     const runwayStart = (): StartSpot => ({
-      position: runwayPoint(HOME, -HOME.length / 2 + (jet ? 60 : 40), 0, t.restHeight),
+      position: runwayPoint(HOME, -HOME.length / 2 + lineUp, 0, t.restHeight),
       heading: HOME.heading,
+      pitchDeg: t.restPitch,
     });
-    switch (id) {
-      case 'airstart': {
-        const s = runwayStart();
+    // a floatplane starts on the water, a glider in the air
+    if (t.floats && (id === 'free' || id === 'crosscountry')) return waterStart(t.restHeight) ?? { ...airStart(), speed: t.cruise, spool: 0.6 };
+    if (t.glider && (id === 'free' || id === 'crosscountry')) id = 'airstart';
+    function airStart(): StartSpot {
+      const s = runwayStart();
+      s.pitchDeg = 0;
         // 600 m above the field, but always well clear of the terrain ahead (fjords, mountains)
         let ahead = 0;
         for (let d = 0; d <= 5000; d += 100) {
           const p = runwayPoint(HOME, -HOME.length / 2 + d, 0);
           ahead = Math.max(ahead, surfaceHeight(p.x, p.z));
         }
-        s.position.y = Math.max(s.position.y + 600, ahead + 400);
-        return { ...s, speed: t.cruise, spool: 0.65 };
-      }
+      s.position.y = Math.max(HOME.center.y + 600, ahead + 400);
+      return s;
+    }
+    switch (id) {
+      case 'airstart':
+        return { ...airStart(), speed: t.cruise, spool: t.glider ? 0 : 0.65 };
       case 'landing': {
         // 3 km before the threshold on a 3° path to the aiming point
         const before = 3000;
@@ -94,15 +128,20 @@ export class Missions {
           heading: HOME.heading,
           speed: t.approach,
           pathDeg: -3,
-          flaps: 1,
-          spool: jet ? 0.45 : 0.3,
+          flaps: t.glider ? 0 : 1,
+          spool: t.glider ? 0 : turbine ? 0.45 : 0.3,
         };
       }
       case 'rings':
-        return { position: this.course.start.clone(), heading: this.course.heading, speed: jet ? 90 : 48, spool: 0.7 };
+        return {
+          position: this.course.start.clone(),
+          heading: this.course.heading,
+          speed: Math.max(t.approach * 1.4, Math.min(t.cruise, 90)),
+          spool: t.glider ? 0 : 0.7,
+        };
       case 'ditching': {
         const d = scenario().ditchingStart!;
-        return { position: d.position.clone().setY(d.position.y + (jet ? 300 : 0)), heading: d.heading, speed: t.cruise * 0.85, spool: 0 };
+        return { position: d.position.clone().setY(d.position.y + (turbine ? 300 : 0)), heading: d.heading, speed: t.cruise * 0.85, spool: 0 };
       }
       default:
         return runwayStart();
@@ -116,16 +155,18 @@ export class Missions {
     const a = this.aircraft;
     a.setType(AIRCRAFT[settings.aircraft]);
     const spot = this.spotFor(this.mission);
+    // cold and dark: only on the ground, gliders have nothing to start
+    if (!spot.speed && settings.start === 'cold' && !a.type.glider) spot.running = false;
     a.realistic = settings.realism === 'real';
     a.reset(spot);
     Object.assign(c, createControlState());
     c.flaps = spot.flaps ?? 0;
     c.throttle = spot.spool ?? 0;
-    // the jet takes off with the first flap notch and nose-up takeoff trim (~140 kt hands-off)
-    if (a.type.id === 'jet' && !spot.speed) {
-      c.flaps = 1 / 3;
-      c.trim = 0.25;
-    }
+    // take-off configuration of the type (flap notch, nose-up trim) when starting on the ground
+    if (!spot.speed) {
+      c.flaps = a.type.takeoff.flaps;
+      c.trim = a.type.takeoff.trim;
+    } else if (a.type.glider) c.trim = a.type.takeoff.trim;
     // airborne starts: gear down only on final approach
     if (a.type.retractableGear && spot.speed && this.mission !== 'landing') c.gear = 0;
     a.gear = c.gear;

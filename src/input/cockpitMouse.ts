@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Controls3D } from '../cockpit/controls3d';
+import type { ButtonId, Controls3D } from '../cockpit/controls3d';
 import type { ControlState } from '../core/input';
 
 /**
@@ -19,7 +19,7 @@ export class CockpitMouse {
     private readonly dom: HTMLElement,
     private readonly controls: ControlState,
     private readonly onHint: (label: string) => void,
-    private readonly onButton: (id: 'menu' | 'recenter') => void = () => {},
+    private readonly onButton: (id: ButtonId) => void = () => {},
   ) {
     dom.addEventListener('contextmenu', (e) => e.preventDefault());
     dom.addEventListener('pointerdown', (e) => {
@@ -52,7 +52,7 @@ export class CockpitMouse {
     });
   }
 
-  private pickButton(e: PointerEvent): 'menu' | 'recenter' | null {
+  private pickButton(e: PointerEvent): ButtonId | null {
     if (!this.visuals) return null;
     const r = this.dom.getBoundingClientRect();
     this.ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);

@@ -7,6 +7,8 @@ import { type InstrumentConfig, type InstrumentData, Instruments } from './instr
 import type { CockpitLayout } from './layout';
 import { panelArt, plastic } from './textures';
 import { mergeChildMeshes } from '../view/merge';
+import type { SwitchId, Systems } from '../sim/systems';
+import { SwitchPanel } from './switchPanel';
 
 const panelMat = new THREE.MeshLambertMaterial({ color: 0x2b2c2f });
 const glareMat = new THREE.MeshLambertMaterial({ map: plastic('#26272a') });
@@ -32,10 +34,15 @@ export class Cockpit {
   private statusText = '-';
   private readonly arrow = new THREE.Group();
   private hud: HeadUpDisplay | null = null;
+  private readonly switches: SwitchPanel;
+  private readonly faceMat: THREE.MeshLambertMaterial;
 
   constructor(
     readonly layout: CockpitLayout,
     instrumentConfig: InstrumentConfig,
+    withHud = false,
+    switches: SwitchId[] = [],
+    autopilot = true,
   ) {
     const g = this.group;
     g.name = 'cockpit';
@@ -63,7 +70,11 @@ export class Cockpit {
     const faceGeo = new THREE.PlaneGeometry(halfW * 2, 0.5);
     const uv = faceGeo.getAttribute('uv');
     for (let i = 0; i < uv.count; i++) uv.setY(i, 0.5 + uv.getY(i) * 0.5);
-    const face = new THREE.Mesh(faceGeo, new THREE.MeshLambertMaterial({ map: panelArt(!cabin, sixFrom, sixTo) }));
+    const art = panelArt(!cabin, sixFrom, sixTo);
+    // the panel flood light makes the artwork glow a little
+    this.faceMat = new THREE.MeshLambertMaterial({ map: art, emissive: 0xffd9a0, emissiveMap: art, emissiveIntensity: 0 });
+    const face = new THREE.Mesh(faceGeo, this.faceMat);
+    face.userData.keep = true;
     face.position.set(cx, E.y - 0.5, front + 0.0005);
     g.add(face);
 
@@ -73,14 +84,19 @@ export class Cockpit {
 
     const dims: Dims = { cx, halfW, front, back, floorY, glareY, sillY };
     if (cabin) buildCabin(g, L, dims);
-    else {
-      buildCanopy(g, L, dims);
+    else buildCanopy(g, L, dims);
+    if (withHud) {
       this.hud = new HeadUpDisplay(E, new THREE.Vector3(E.x, E.y - 0.07, front + 0.16), 0.22);
       this.hud.group.rotation.x = -0.12;
       g.add(this.hud.group);
     }
 
     g.add(this.controls3d.group);
+
+    // switch panel below the status line
+    this.switches = new SwitchPanel(new THREE.Vector3(L.panelX, E.y - 0.645, front + 0.002), 0.84, switches, autopilot);
+    this.controls3d.buttons.push(...this.switches.buttons);
+    g.add(this.switches.group);
 
     // status line below the instruments
     const sc = document.createElement('canvas');
@@ -123,8 +139,20 @@ export class Cockpit {
     mergeChildMeshes(g);
   }
 
-  update(dt: number, c: ControlState, gearPosition: number, data: InstrumentData, status: string, target: THREE.Vector3 | null, hud: HudData): void {
+  update(
+    dt: number,
+    c: ControlState,
+    gearPosition: number,
+    data: InstrumentData,
+    status: string,
+    target: THREE.Vector3 | null,
+    hud: HudData,
+    sys: Systems,
+  ): void {
     this.controls3d.update(c, gearPosition);
+    const panelLight = sys.panel && sys.battery;
+    this.switches.update(sys, panelLight);
+    this.faceMat.emissiveIntensity = panelLight ? 0.12 : 0;
     this.instruments.update(dt, data);
     this.hud?.update(dt, hud);
     this.setStatus(status);

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { FlightFeel } from './feel';
 
 export type CameraMode = 'cockpit' | 'chase';
 
@@ -6,6 +7,8 @@ const CHASE_OFFSET = new THREE.Vector3(0, 2.8, 13);
 const Y = new THREE.Vector3(0, 1, 0);
 /** desktop cockpit looks slightly down so the panel is in view */
 const COCKPIT_PITCH = -0.2;
+/** in VR the head shake is toned down: moving the view against the inner ear is uncomfortable */
+const XR_SHAKE = 0.35;
 
 /**
  * Desktop: cockpit view (mouse-look) or smoothed chase view.
@@ -26,6 +29,10 @@ export class CameraRig {
   private readonly euler = new THREE.Euler(0, 0, 0, 'YXZ');
   private readonly v = new THREE.Vector3();
   private recenterIn = -1;
+  /** head shake and G sway (set by the main loop) */
+  feel: FlightFeel | null = null;
+  private readonly xrShake = new THREE.Vector3();
+  private readonly tiltQuat = new THREE.Quaternion();
 
   constructor(
     private readonly camera: THREE.PerspectiveCamera,
@@ -107,6 +114,7 @@ export class CameraRig {
     this.xrRig.rotation.set(0, -headYaw, 0);
     this.v.copy(this.camera.position).applyAxisAngle(Y, -headYaw);
     this.xrRig.position.copy(this.eye).sub(this.v);
+    this.xrShake.set(0, 0, 0);
   }
 
   update(dt: number): void {
@@ -115,14 +123,20 @@ export class CameraRig {
         this.recenterIn -= dt;
         if (this.recenterIn <= 0) this.recenter();
       }
+      const shake = this.v.copy(this.feel?.offset ?? this.v.set(0, 0, 0)).multiplyScalar(XR_SHAKE);
+      this.xrRig.position.sub(this.xrShake).add(shake);
+      this.xrShake.copy(shake);
       return;
     }
     const ac = this.aircraft;
     this.euler.set(this.pitch, this.yaw, 0, 'YXZ');
     this.look.setFromEuler(this.euler);
     if (this.mode === 'cockpit') {
-      this.camera.position.copy(this.eye).applyQuaternion(ac.quaternion).add(ac.position);
+      this.v.copy(this.eye);
+      if (this.feel) this.v.add(this.feel.offset);
+      this.camera.position.copy(this.v).applyQuaternion(ac.quaternion).add(ac.position);
       this.camera.quaternion.copy(ac.quaternion).multiply(this.look);
+      if (this.feel) this.camera.quaternion.multiply(this.tiltQuat.setFromEuler(this.feel.tilt));
       this.smoothQuat.copy(ac.quaternion);
     } else {
       this.smoothQuat.slerp(ac.quaternion, 1 - Math.exp(-dt * 3));

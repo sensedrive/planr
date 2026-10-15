@@ -1,3 +1,5 @@
+import type { SwitchId } from '../sim/systems';
+
 /** Unified pilot inputs, written by keyboard, gamepad or the VR cockpit. */
 export interface ControlState {
   /** -1 push (nose down) … +1 pull (nose up) */
@@ -34,6 +36,10 @@ export interface Actions {
   toggleMenu(): void;
   /** changes the seat height by `delta` metres */
   adjustSeat(delta: number): void;
+  /** a switch or button on the cockpit switch panel */
+  cockpitSwitch(id: SwitchId): void;
+  /** battery, fuel pump, ignition and starter in one go */
+  autoStart(): void;
 }
 
 export function createControlState(): ControlState {

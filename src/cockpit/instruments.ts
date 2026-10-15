@@ -27,7 +27,8 @@ export interface InstrumentConfig {
   greenArc: [number, number];
   yellowArc: [number, number];
   flapArc: [number, number];
-  engine: 'rpm' | 'n1';
+  engine: 'rpm' | 'n1' | 'tq' | 'vario';
+  maxRpm?: number;
   flapDegrees: number;
 }
 
@@ -78,7 +79,7 @@ export class Instruments {
     this.airspeed(cx(0), cy, d.airspeedKt);
     this.attitude(cx(1), cy, d.pitchDeg, d.rollDeg);
     this.altimeter(cx(2), cy, d.altitudeFt);
-    this.tachometer(cx(3), cy, d.rpm);
+    this.tachometer(cx(3), cy, d.rpm, d.vsFpm);
     this.heading(cx(4), cy, d.headingDeg);
     this.vsi(cx(5), cy, d.vsFpm);
     this.strip(d);
@@ -262,15 +263,18 @@ export class Instruments {
     this.needle(x, y, a0 + ((f % 1000) / 1000) * TAU, R - 12, 6);
   }
 
-  private tachometer(x: number, y: number, rpm: number): void {
-    if (this.cfg.engine === 'n1') return this.n1Gauge(x, y, rpm);
+  private tachometer(x: number, y: number, rpm: number, vsFpm = 0): void {
+    if (this.cfg.engine === 'n1') return this.n1Gauge(x, y, rpm, 'N1 %');
+    if (this.cfg.engine === 'tq') return this.n1Gauge(x, y, rpm, 'TORQUE %');
+    if (this.cfg.engine === 'vario') return this.vario(x, y, vsFpm);
     this.bezel(x, y);
+    const max = this.cfg.maxRpm ?? 3000;
     const a0 = 0.75 * Math.PI;
-    const ang = (v: number) => a0 + (Math.min(v, 3000) / 3000) * 1.5 * Math.PI;
+    const ang = (v: number) => a0 + (Math.min(v, max) / max) * 1.5 * Math.PI;
     this.arc(x, y, ang(2100), ang(2700), '#2fb34a');
     this.arc(x, y, ang(2700), ang(2740), '#e23b2b', R - 6, 9);
     this.ticks(x, y, ang(0), ang(3000), 30, 5);
-    for (let v = 0; v <= 30; v += 5) {
+    for (let v = 0; v <= max / 100; v += 5) {
       const a = ang(v * 100);
       this.label(String(v), x + Math.cos(a) * (R - 36), y + Math.sin(a) * (R - 36), 20);
     }
@@ -279,7 +283,23 @@ export class Instruments {
     this.needle(x, y, ang(rpm), R - 12);
   }
 
-  private n1Gauge(x: number, y: number, n1: number): void {
+  /** Glider variometer: ±5 m/s. */
+  private vario(x: number, y: number, fpm: number): void {
+    this.bezel(x, y);
+    const ms = fpm / 196.85;
+    const ang = (v: number) => Math.PI + (Math.max(-5, Math.min(5, v)) / 5) * 0.88 * Math.PI;
+    this.arc(x, y, ang(0), ang(5), '#2fb34a');
+    this.arc(x, y, ang(-5), ang(0), '#e8c22c');
+    this.ticks(x, y, ang(-5), ang(5), 20, 2);
+    for (const v of [-4, -2, 0, 2, 4]) {
+      const a = ang(v);
+      this.label(String(v), x + Math.cos(a) * (R - 36), y + Math.sin(a) * (R - 36), 20);
+    }
+    this.label('VARIO m/s', x + 18, y + 40, 14, '#bbb');
+    this.needle(x, y, ang(ms), R - 12);
+  }
+
+  private n1Gauge(x: number, y: number, n1: number, title = 'N1 %'): void {
     this.bezel(x, y);
     const a0 = 0.75 * Math.PI;
     const ang = (v: number) => a0 + (Math.min(v, 110) / 110) * 1.5 * Math.PI;
@@ -290,7 +310,7 @@ export class Instruments {
       const a = ang(v);
       this.label(String(v), x + Math.cos(a) * (R - 36), y + Math.sin(a) * (R - 36), 20);
     }
-    this.label('N1 %', x, y - 30, 14, '#bbb');
+    this.label(title, x, y - 30, 14, '#bbb');
     this.digits(n1.toFixed(1), x, y + 50, 86);
     this.needle(x, y, ang(n1), R - 12);
   }

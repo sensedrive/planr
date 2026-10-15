@@ -3,10 +3,12 @@ import { choiceAvailable, OPTIONS, type Settings } from '../game/settings';
 import type { MenuHandlers } from './menu';
 
 const W = 1024;
-const H = 1240;
 const ROW_H = 84;
 const TOP = 110;
 const LABEL_W = 300;
+const PER_LINE = 5;
+const lines = (n: number) => Math.ceil(n / PER_LINE);
+const H = TOP + OPTIONS.reduce((sum, o) => sum + lines(o.choices.length) * ROW_H, 0) + 150;
 
 interface Hit {
   x: number;
@@ -146,32 +148,36 @@ export class VRMenu {
     ctx.fillStyle = '#9aa7b5';
     ctx.fillText('Laser + Trigger zum Auswählen', 230, 62);
 
-    OPTIONS.forEach((opt, r) => {
-      const y = TOP + r * ROW_H;
+    let y0 = TOP;
+    OPTIONS.forEach((opt) => {
+      const y = y0;
+      y0 += lines(opt.choices.length) * ROW_H;
       ctx.fillStyle = '#cfd8e0';
       ctx.font = '28px sans-serif';
       ctx.textAlign = 'left';
       ctx.fillText(opt.label, 40, y + 34);
-      const n = opt.choices.length;
+      const n = Math.min(PER_LINE, opt.choices.length);
       const gap = 10;
       const w = (W - LABEL_W - 40 - gap * (n - 1)) / n;
-      opt.choices.forEach((ch, i) => {
+      opt.choices.forEach((ch, idx) => {
+        const i = idx % PER_LINE;
+        const yy = y + Math.floor(idx / PER_LINE) * ROW_H;
         const x = LABEL_W + i * (w + gap);
         if (!choiceAvailable(ch, this.settings)) {
           ctx.globalAlpha = 0.3;
-          this.button(x, y, w, ROW_H - 16, ch.label, false, () => {});
+          this.button(x, yy, w, ROW_H - 16, ch.label, false, () => {});
           this.hits.pop();
           ctx.globalAlpha = 1;
           return;
         }
-        this.button(x, y, w, ROW_H - 16, ch.label, this.settings[opt.key] === ch.value, () => {
+        this.button(x, yy, w, ROW_H - 16, ch.label, this.settings[opt.key] === ch.value, () => {
           this.handlers.change(opt.key, ch.value);
           this.draw();
         });
       });
     });
 
-    const fy = TOP + OPTIONS.length * ROW_H + 10;
+    const fy = y0 + 10;
     ctx.fillStyle = '#9aa7b5';
     ctx.font = '24px sans-serif';
     ctx.textAlign = 'left';

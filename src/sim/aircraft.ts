@@ -4,6 +4,7 @@ import { computeAero, createAeroOut } from './aero';
 import { airDensity, RHO0 } from './atmosphere';
 import type { PowerPlant } from './engine';
 import { computeGround, type HeightFn } from './ground';
+import { Systems } from './systems';
 import { C172, type AircraftType } from './types';
 
 const GRAVITY = 9.81;
@@ -20,6 +21,10 @@ export interface StartSpot {
   speed?: number;
   /** flight-path angle in degrees for airborne starts (negative = descending) */
   pathDeg?: number;
+  /** nose-up attitude in degrees (tail-draggers standing on the ground) */
+  pitchDeg?: number;
+  /** engine running at the start (false = cold and dark) */
+  running?: boolean;
   flaps?: number;
   spool?: number;
 }
@@ -45,6 +50,7 @@ export class Aircraft {
   readonly aero = createAeroOut();
   /** landing gear position: 0 retracted … 1 down */
   gear = 1;
+  readonly systems = new Systems();
 
   private readonly prevPos = new Vector3();
   private readonly prevQuat = new Quaternion();
@@ -59,6 +65,9 @@ export class Aircraft {
   crashReason = '';
   /** the "crash" was a successful ditching on water */
   ditched = false;
+  /** load factor felt by the pilot along the body axes (g): up (1 in level flight) and right */
+  gLoad = 1;
+  gSide = 0;
   /** set on the step the wheels first touch after flight; consumers clear it */
   touchdown: Touchdown | null = null;
 
@@ -74,15 +83,22 @@ export class Aircraft {
     if (type === this.type) return;
     this.type = type;
     this.engine = type.createEngine();
+    this.systems.reset(type, true);
+  }
+
+  constructor() {
+    this.systems.reset(this.type, true);
   }
 
   reset(spot: StartSpot): void {
     this.pos.copy(spot.position);
     this.gear = 1;
     this.quat.setFromAxisAngle(new Vector3(0, 1, 0), (-spot.heading * Math.PI) / 180);
+    if (spot.pitchDeg) this.quat.multiply(new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), (spot.pitchDeg * Math.PI) / 180));
     this.omega.set(0, 0, 0);
     this.vel.set(0, 0, 0);
-    this.engine.reset();
+    this.engine.reset(spot.running ?? true);
+    this.systems.reset(this.type, spot.running ?? true);
     this.flaps = spot.flaps ?? 0;
     this.crashed = false;
     this.crashReason = '';
@@ -107,8 +123,10 @@ export class Aircraft {
     if (this.crashed) return;
 
     const t = this.type;
+    this.systems.fly(dt, this, c);
+    this.systems.step(dt, this, c);
     this.flaps += MathUtils.clamp(c.flaps - this.flaps, -dt * 0.3, dt * 0.3);
-    if (t.retractableGear) {
+    if (t.retractableGear && this.systems.gearCanMove()) {
       // weight on wheels blocks retraction; a full cycle takes ~6 s
       const target = this.onGround ? 1 : c.gear >= 0.5 ? 1 : 0;
       this.gear += MathUtils.clamp(target - this.gear, -dt / 6, dt / 6);
@@ -149,6 +167,12 @@ export class Aircraft {
     }
     this.onGround = ground.onGround;
     this.airTime = this.onGround ? 0 : this.airTime + dt;
+    // specific force (everything but gravity) in body axes
+    this.tmp.copy(this.forceW).divideScalar(t.mass);
+    this.tmp.y += GRAVITY;
+    this.tmp.applyQuaternion(this.invQuat);
+    this.gLoad = this.tmp.y / GRAVITY;
+    this.gSide = this.tmp.x / GRAVITY;
 
     this.momentB.copy(this.torqueW).applyQuaternion(this.invQuat).add(aero.moment);
     if (this.realistic && t.propeller) {
@@ -192,13 +216,14 @@ export class Aircraft {
   /** A gentle, wings-level, slightly nose-up touchdown on water counts as a successful ditching. */
   private rateDitching(): void {
     const sink = -this.verticalSpeedFpm;
-    const limitKt = this.type.id === 'jet' ? 150 : 75;
+    const limitKt = this.type.ditchLimitKt;
     const problems: string[] = [];
     if (sink > 500) problems.push(`zu hohe Sinkrate (${Math.round(sink)} ft/min)`);
     if (this.airspeedKt > limitKt) problems.push(`zu schnell (${Math.round(this.airspeedKt)} kn)`);
     if (Math.abs(this.rollDeg) > 12) problems.push('Fläche zuerst eingetaucht');
     if (this.pitchDeg < -4) problems.push('Nase zuerst eingetaucht');
     if (this.type.retractableGear && this.gear > 0.5) problems.push('Fahrwerk ausgefahren');
+    if (this.type.floats) problems.length = 0;
     this.ditched = problems.length === 0;
     this.crashReason = this.ditched ? 'Notwasserung gelungen – alle an Bord gerettet' : `Wasserung misslungen: ${problems.join(', ')}`;
   }

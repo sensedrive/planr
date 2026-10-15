@@ -3,7 +3,7 @@ import { clamp, type ControlState } from '../core/input';
 
 export type HeightFn = (x: number, z: number) => number;
 
-type ContactKind = 'nose' | 'main' | 'skid' | 'crash';
+type ContactKind = 'nose' | 'main' | 'tail' | 'skid' | 'float' | 'crash';
 
 export interface Contact {
   p: Vector3; // body-frame position relative to the centre of gravity
@@ -98,23 +98,26 @@ export function computeGround(
 
   const gearDown = gear > 0.98;
   for (const ct of contacts) {
-    const wheel = ct.kind === 'nose' || ct.kind === 'main';
+    const wheel = ct.kind === 'nose' || ct.kind === 'main' || ct.kind === 'tail';
     if (wheel && !gearDown) continue;
     r.copy(ct.p).applyQuaternion(quat);
     wp.copy(pos).add(r);
-    const h = height(wp.x, wp.z);
-    if (h < 0 && wp.y < 0) {
+    const terrain = height(wp.x, wp.z);
+    const onWater = terrain < 0;
+    if (onWater && wp.y < 0 && ct.kind !== 'float') {
       result.crash = 'Im Wasser gelandet';
       result.water = true;
       return result;
     }
+    // floats ride on the water surface
+    const h = ct.kind === 'float' ? Math.max(terrain, 0) : terrain;
     const d = h - wp.y;
     if (d <= 0) continue;
     if (ct.kind === 'crash') {
       result.crash = gear < 0.98 ? 'Bauchlandung – Fahrwerk war nicht ausgefahren' : `${ct.label} hat den Boden berührt`;
       return result;
     }
-    if (ct.kind !== 'skid' && d > MAX_COMPRESSION) {
+    if (ct.kind !== 'skid' && ct.kind !== 'float' && d > MAX_COMPRESSION) {
       result.crash = 'Harte Landung – Fahrwerk gebrochen';
       return result;
     }
@@ -124,7 +127,25 @@ export function computeGround(
     const Fn = Math.max(0, ct.k * d - ct.c * vP.y);
     F.set(0, Fn, 0);
 
-    if (ct.kind === 'skid') {
+    if (ct.kind === 'float') {
+      dir.copy(fw);
+      side.crossVectors(dir, UP);
+      const vLong = vP.dot(dir);
+      const vLat = vP.dot(side);
+      if (onWater) {
+        // hydrodynamic drag (quadratic, eases once planing) and strong side grip of the keels
+        // drag scales with the load the float carries and peaks at the "hump" before planing
+        const x = Math.abs(vLong) / 8;
+        const drag = Math.sign(vLong) * Fn * 0.2 * x * Math.exp(1 - x) + vLong * 8;
+        F.addScaledVector(dir, -drag).addScaledVector(side, -clamp(vLat * 2500, -0.9 * Fn, 0.9 * Fn));
+        // water rudder: a little steering with the rudder
+        F.addScaledVector(side, clamp(c.yaw) * Math.min(1, Math.abs(vLong) / 6) * 0.08 * Fn);
+      } else {
+        const f = Math.min(Math.hypot(vLong, vLat) * 3000, 0.5 * Fn);
+        const v = Math.hypot(vLong, vLat) || 1;
+        F.addScaledVector(dir, (-vLong / v) * f).addScaledVector(side, (-vLat / v) * f);
+      }
+    } else if (ct.kind === 'skid') {
       const vh = Math.hypot(vP.x, vP.z);
       if (vh > 1e-4) {
         const f = Math.min(vh * 3000, 0.45 * Fn) / vh;
@@ -134,6 +155,8 @@ export function computeGround(
     } else {
       dir.copy(fw);
       if (ct.kind === 'nose') dir.applyAxisAngle(UP, (-clamp(c.yaw) * 0.35) / (1 + groundSpeed / 20));
+      // a steerable tail wheel turns the other way to point the nose with the rudder
+      if (ct.kind === 'tail') dir.applyAxisAngle(UP, (clamp(c.yaw) * 0.3) / (1 + groundSpeed / 15));
       side.crossVectors(dir, UP);
       const mu = ct.kind === 'main' ? 0.025 + clamp(c.brake, 0, 1) * 0.65 : 0.025;
       const fLong = -clamp(vP.dot(dir) * 4000, -mu * Fn, mu * Fn);

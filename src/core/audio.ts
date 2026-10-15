@@ -199,6 +199,25 @@ export class FlightAudio {
   }
 
   /** A short thump (and tyre chirp when fast); `fpm` = sink rate at touchdown. */
+  /** Switch click in the cockpit. */
+  click(): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.frequency.value = 3200;
+    f.Q.value = 2;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.5, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.035);
+    src.connect(f).connect(g).connect(this.cabin);
+    src.start(t, Math.random());
+    src.stop(t + 0.06);
+  }
+
   touchdown(fpm: number, speed: number): void {
     const ctx = this.ctx;
     if (!ctx) return;

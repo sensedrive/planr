@@ -137,9 +137,10 @@ export class XRCockpitInput {
       const p = tmpHand.copy(tip ?? hand.grip.position).applyMatrix4(this.rig.matrix);
       for (const b of this.visuals.buttons) {
         if (p.distanceTo(b.centre) < PRESS_RADIUS) {
-          this.pressCooldown = 0.8;
+          this.pressCooldown = 0.45;
           if (b.id === 'menu') this.actions.toggleMenu();
-          else this.actions.recenter();
+          else if (b.id === 'recenter') this.actions.recenter();
+          else this.actions.cockpitSwitch(b.id);
           return;
         }
       }
@@ -181,7 +182,7 @@ export class XRCockpitInput {
     return this.hands.some((h) => h.handle !== null);
   }
 
-  update(dt: number, c: ControlState, stall: boolean): void {
+  update(dt: number, c: ControlState, stall: boolean, rumble = 0): void {
     this.controls = c;
     this.rig.updateMatrix();
     for (const hand of this.hands) if (this.tracked(hand)) this.updateFist(hand);
@@ -230,11 +231,15 @@ export class XRCockpitInput {
       hand.prev = pressed;
     }
 
-    // stall buffet on the stick hand
+    // stall buffet on the stick hand, rumble (runway, turbulence) in every hand that holds a control
     this.stallPulse -= dt;
-    if (stall && this.stallPulse <= 0) {
-      this.stallPulse = 0.12;
-      for (const hand of this.hands) if (hand.handle?.id === 'stick') this.pulse(hand, 0.35, 60);
+    if ((stall || rumble > 0.08) && this.stallPulse <= 0) {
+      this.stallPulse = 0.11;
+      for (const hand of this.hands) {
+        if (!hand.handle) continue;
+        const k = Math.max(rumble * (hand.handle.id === 'stick' ? 0.6 : 0.35), stall && hand.handle.id === 'stick' ? 0.35 : 0);
+        if (k > 0.03) this.pulse(hand, Math.min(1, k), 70);
+      }
     }
 
     // highlight what a free hand could grab

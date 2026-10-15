@@ -1,4 +1,4 @@
-import type { AircraftId } from '../sim/types';
+import { type AircraftId, AIRCRAFT } from '../sim/types';
 import type { ScenarioId } from '../world/scenario';
 import type { TimeOfDay } from '../world/sky';
 import type { WindSetting } from './weather';
@@ -14,7 +14,13 @@ export interface Settings {
   time: TimeOfDay;
   realism: 'simple' | 'real';
   failure: 'off' | 'random' | 'takeoff';
+  /** ground starts: engine running or cold and dark */
+  start: 'ready' | 'cold';
   vignette: 'off' | 'on';
+  /** head shake from runway, turbulence, buffet */
+  shake: 'off' | 'on';
+  /** AI aircraft in the sky */
+  traffic: 'off' | 'normal' | 'busy';
   /** seat height offset in metres */
   seat: number;
   /** stick hand travel for full deflection in metres */
@@ -53,10 +59,7 @@ export const OPTIONS: OptionDef[] = [
   {
     key: 'aircraft',
     label: 'Flugzeug',
-    choices: [
-      { value: 'c172', label: 'Cessna-artig' },
-      { value: 'jet', label: 'Jet-Trainer' },
-    ],
+    choices: Object.values(AIRCRAFT).map((a) => ({ value: a.id, label: a.short })),
   },
   {
     key: 'mission',
@@ -117,8 +120,34 @@ export const OPTIONS: OptionDef[] = [
     ],
   },
   {
+    key: 'traffic',
+    label: 'Flugverkehr',
+    choices: [
+      { value: 'off', label: 'Aus' },
+      { value: 'normal', label: 'Normal' },
+      { value: 'busy', label: 'Viel' },
+    ],
+  },
+  {
+    key: 'start',
+    label: 'Start am Boden',
+    choices: [
+      { value: 'ready', label: 'Motor läuft' },
+      { value: 'cold', label: 'Kalt & dunkel' },
+    ],
+  },
+  {
     key: 'vignette',
     label: 'Komfort-Vignette',
+    live: true,
+    choices: [
+      { value: 'off', label: 'Aus' },
+      { value: 'on', label: 'An' },
+    ],
+  },
+  {
+    key: 'shake',
+    label: 'Wackeln & Vibration',
     live: true,
     choices: [
       { value: 'off', label: 'Aus' },
@@ -158,7 +187,10 @@ export const DEFAULT_SETTINGS: Settings = {
   time: 'day',
   realism: 'real',
   failure: 'off',
+  start: 'ready',
   vignette: 'on',
+  shake: 'on',
+  traffic: 'normal',
   seat: 0,
   stick: 0.13,
 };

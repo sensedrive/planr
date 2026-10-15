@@ -4,7 +4,8 @@ import { Cockpit } from './cockpit/cockpit';
 import { stickConfig } from './cockpit/controls3d';
 import { makeLayout } from './cockpit/layout';
 import { CockpitMouse } from './input/cockpitMouse';
-import { type AircraftId, type AircraftType, C172, JET } from './sim/types';
+import { AIRCRAFT, type AircraftId, type AircraftType } from './sim/types';
+import { switchesFor } from './sim/systems';
 import { FlightAudio } from './core/audio';
 import { type Actions, clamp, createControlState } from './core/input';
 import { FixedStepLoop } from './core/loop';
@@ -17,11 +18,12 @@ import { XRCockpitInput } from './input/xrCockpit';
 import { Aircraft } from './sim/aircraft';
 import { Menu, type MenuHandlers } from './ui/menu';
 import { VRMenu } from './ui/vrMenu';
-import { AircraftModel, type AircraftVisual } from './view/aircraftModel';
-import { JetModel } from './view/jetModel';
+import { type AircraftVisual, GenericModel } from './view/genericModel';
 import { CameraRig } from './view/cameras';
 import { Hud } from './view/hud';
 import { Vignette } from './view/vignette';
+import { FlightFeel } from './view/feel';
+import { TrafficManager } from './game/traffic';
 import type { City } from './world/city';
 import { Forest } from './world/forest';
 import { type Airfield, createAirfields } from './world/runway';
@@ -79,19 +81,27 @@ interface Variant {
   model: AircraftVisual;
   cockpit: Cockpit;
 }
-const variants: Record<AircraftId, Variant> = {
-  c172: { type: C172, model: new AircraftModel(), cockpit: new Cockpit(makeLayout(C172), { ...C172.instruments, flapDegrees: C172.flapDegrees }) },
-  jet: { type: JET, model: new JetModel(), cockpit: new Cockpit(makeLayout(JET), { ...JET.instruments, flapDegrees: JET.flapDegrees }) },
-};
-for (const v of Object.values(variants)) {
+/** models and cockpits are built the first time a type is flown */
+const variants: Partial<Record<AircraftId, Variant>> = {};
+function variant(id: AircraftId): Variant {
+  const existing = variants[id];
+  if (existing) return existing;
+  const type = AIRCRAFT[id];
+  const v: Variant = {
+    type,
+    model: new GenericModel(type),
+    cockpit: new Cockpit(makeLayout(type), { ...type.instruments, flapDegrees: type.flapDegrees }, type.hud, switchesFor(type), !type.glider),
+  };
   v.model.root.traverse((o) => {
-    if (o instanceof THREE.Mesh) o.castShadow = true;
+    if (o instanceof THREE.Mesh && !o.userData.noShadow) o.castShadow = true;
   });
   aircraftRoot.add(v.model.root, v.cockpit.group);
   v.model.root.visible = false;
   v.cockpit.group.visible = false;
+  variants[id] = v;
+  return v;
 }
-let current = variants.c172;
+let current = variant('c172');
 const model = () => current.model;
 const cockpit = () => current.cockpit;
 
@@ -99,10 +109,14 @@ const controls = createControlState();
 const weather = new Weather();
 const missions = new Missions(aircraft, weather);
 scene.add(missions.course.group);
+const traffic = new TrafficManager(surfaceHeight);
+scene.add(traffic.group);
 const hud = new Hud();
 const audio = new FlightAudio();
 const cameraRig = new CameraRig(camera, scene, aircraftRoot, renderer.domElement);
 const vignette = new Vignette(camera);
+const feel = new FlightFeel();
+cameraRig.feel = feel;
 const settings: Settings = loadSettings();
 
 let started = false;
@@ -161,7 +175,7 @@ function useAircraft(id: AircraftId): void {
   current.model.root.visible = false;
   current.cockpit.group.visible = false;
   current.cockpit.setMessage('');
-  current = variants[id];
+  current = variant(id);
   current.model.root.visible = true;
   cameraRig.setEye(current.type.eye);
   xrInput.setVisuals(current.cockpit.controls3d);
@@ -198,8 +212,12 @@ function scenarioCloudBase(): number {
 }
 
 function applyLive(): void {
-  env.setWeather(skyLook());
+  const look = skyLook();
+  env.setWeather(look);
+  weather.thermals = settings.time === 'day' && !look.overcast;
+  weather.cloudBase = look.base ?? scenarioCloudBase();
   vignette.enabled = settings.vignette === 'on';
+  feel.enabled = settings.shake === 'on';
   cameraRig.seat = settings.seat;
   stickConfig.travel = settings.stick;
   env.setTime(settings.time);
@@ -227,6 +245,7 @@ async function startFlight(override?: Partial<Settings>): Promise<void> {
   }
   useAircraft(settings.aircraft);
   missions.start({ ...settings, ...override }, controls);
+  traffic.start({ off: 0, normal: 1, busy: 2 }[settings.traffic], aircraft.pos);
   if (settings.sky === 'live') {
     if (!metar) await metarPromise;
     if (metar) {
@@ -288,6 +307,18 @@ const actions: Actions = {
   toggleMute: () => audio.toggleMute(),
   toggleHelp: () => hud.toggleHelp(),
   toggleMenu: () => (menuOpen ? started && closeMenu() : openMenu()),
+  cockpitSwitch: (id) => {
+    if (!started || menuOpen) return;
+    aircraft.systems.toggle(id, aircraft);
+    audio.click();
+  },
+  autoStart: () => {
+    const s = aircraft.systems;
+    if (!started || menuOpen || aircraft.engine.running || current.type.glider) return;
+    for (const id of ['battery', 'fuelPump', 'ignition', 'beacon'] as const) if (!s[id]) s.toggle(id, aircraft);
+    s.toggle('starter', aircraft);
+    audio.click();
+  },
   adjustSeat: (delta) => {
     settings.seat = clamp(settings.seat + delta, -0.2, 0.2);
     cameraRig.seat = settings.seat;
@@ -307,7 +338,7 @@ const cockpitMouse = new CockpitMouse(
     hintText = label;
     hintUntil = performance.now() + 1200;
   },
-  (id) => (id === 'menu' ? actions.toggleMenu() : actions.recenter()),
+  (id) => (id === 'menu' ? actions.toggleMenu() : id === 'recenter' ? actions.recenter() : actions.cockpitSwitch(id)),
 );
 let hintText = '';
 let hintUntil = 0;
@@ -376,7 +407,7 @@ renderer.setAnimationLoop((time) => {
 
   controls.brake = 0;
   if (xr) {
-    xrInput.update(dt, controls, aircraft.stallWarning);
+    xrInput.update(dt, controls, aircraft.stallWarning, feel.rumble);
     vrMenu.update();
   } else {
     keyboard.update(dt, controls);
@@ -387,10 +418,21 @@ renderer.setAnimationLoop((time) => {
   }
 
   if (running) {
-    weather.update(dt, aircraft.pos.y - surfaceHeight(aircraft.pos.x, aircraft.pos.z));
+    weather.update(dt, aircraft.pos.y - surfaceHeight(aircraft.pos.x, aircraft.pos.z), aircraft.pos, terrainHeight);
     missions.update(dt);
+    traffic.update(dt, aircraft);
+    if (!aircraft.crashed && traffic.collides(aircraft)) {
+      aircraft.crashed = true;
+      aircraft.crashReason = 'Zusammenstoß mit einem anderen Flugzeug';
+    }
   }
+  const status = (running && traffic.advisory?.text) || missions.status;
   const alpha = running ? loop.advance(dt, (step) => aircraft.step(step, controls, surfaceHeight, weather.current)) : 1;
+  if (aircraft.systems.notice) {
+    hintText = aircraft.systems.notice;
+    hintUntil = performance.now() + 2500;
+    aircraft.systems.notice = '';
+  }
   if (aircraft.touchdown && !lastTouchdown) audio.touchdown(aircraft.touchdown.vsFpm, aircraft.touchdown.airspeedKt / 1.944);
   lastTouchdown = aircraft.touchdown;
   // gear or flaps travelling → electric motor sound
@@ -429,7 +471,7 @@ renderer.setAnimationLoop((time) => {
         trimYaw: controls.trimYaw,
         gear: current.type.retractableGear ? aircraft.gear : null,
       },
-      missions.status || `Wind ${windStr}`,
+      status || `Wind ${windStr}`,
       missions.target,
       {
         pitchDeg: aircraft.pitchDeg,
@@ -443,6 +485,7 @@ renderer.setAnimationLoop((time) => {
         gear: current.type.retractableGear ? aircraft.gear : 0,
         throttle: controls.throttle,
       },
+      aircraft.systems,
     );
   }
 
@@ -460,7 +503,9 @@ renderer.setAnimationLoop((time) => {
   cameraRig.update(dt);
   camera.getWorldPosition(viewer);
   for (const a of airfields) a.update(viewer, weather.current);
-  vignette.update(dt, aircraft.omega.length(), inCockpit && running);
+  feel.update(running ? dt : 0, aircraft, running && !aircraft.crashed);
+  vignette.update(dt, aircraft.omega.length(), inCockpit && running, inCockpit ? feel.blackout : 0, inCockpit ? feel.redout : 0);
+  if (!xr) gamepad.rumble(dt, running ? feel.rumble : 0);
 
   // messages
   let title = '';
@@ -490,18 +535,19 @@ renderer.setAnimationLoop((time) => {
   if (xr) cockpit().setMessage(title, subtitle);
   else {
     hud.setMessage(title, subtitle);
-    hud.update(dt, aircraft, controls, fps, windStr, missions.status);
+    hud.update(dt, aircraft, controls, fps, windStr, status);
   }
 
   audio.update({
-    rpm: aircraft.engine.rpm,
+    rpm: current.type.sound === 'turboprop' ? (aircraft.engine.running ? 58 + aircraft.engine.spool * 40 : 0) : aircraft.engine.rpm,
     power: aircraft.engine.spool,
     airspeed: aircraft.aero.airspeed,
     groundSpeed: Math.hypot(aircraft.vel.x, aircraft.vel.z),
     onGround: aircraft.onGround,
     stall: aircraft.stallWarning,
     silent: aircraft.crashed || !running,
-    jet: current.type.id === 'jet',
+    // turboprops use the turbine recordings, mapped from torque to an N1-like value
+    jet: current.type.sound === 'jet' || current.type.sound === 'turboprop',
     inCockpit,
     motors,
     rain: env.rainLevel,
@@ -530,4 +576,4 @@ async function devView(x: number, y: number, z: number, headingDeg: number, mode
   renderer.render(scene, camera);
 }
 
-if (import.meta.env.DEV) Object.assign(window, { sim: { devView, renderer, scene, camera, terrain, env, variants, aircraft, controls, actions, cameraRig, missions, settings, weather, OPTIONS } });
+if (import.meta.env.DEV) Object.assign(window, { sim: { devView, useAircraft, renderer, scene, camera, terrain, env, variants, aircraft, controls, actions, cameraRig, missions, settings, weather, OPTIONS } });
