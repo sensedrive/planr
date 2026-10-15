@@ -7,7 +7,7 @@ const white = new THREE.MeshLambertMaterial({ color: 0xf2f1ec, flatShading: true
 const red = new THREE.MeshLambertMaterial({ color: 0xb8322a, flatShading: true });
 const dark = new THREE.MeshLambertMaterial({ color: 0x2c2d30, flatShading: true });
 const glass = new THREE.MeshLambertMaterial({ color: 0x20303f, flatShading: true });
-const discMat = new THREE.MeshBasicMaterial({ color: 0x222222, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide });
+const discMat = new THREE.MeshBasicMaterial({ color: 0x222222, transparent: true, opacity: 0.09, depthWrite: false, side: THREE.DoubleSide });
 
 function box(w: number, h: number, d: number, x: number, y: number, z: number, mat: THREE.Material): THREE.Mesh {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);

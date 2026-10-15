@@ -151,20 +151,20 @@ export class City {
   }
 
   /** Shows tiles by distance and builds missing meshes within a time budget. */
-  update(x: number, z: number, budgetMs = 3): void {
+  update(x: number, z: number, budgetMs = 3, far = FAR): void {
     for (const [key, t] of this.tiles) {
       const [tx, tz] = key.split(',').map(Number);
       const dx = Math.max(0, Math.abs(x - (tx + 0.5) * TILE) - TILE / 2);
       const dz = Math.max(0, Math.abs(z - (tz + 0.5) * TILE) - TILE / 2);
       const d = Math.hypot(dx, dz);
       const wantNear = d < NEAR;
-      const wantFar = !wantNear && d < FAR;
+      const wantFar = !wantNear && d < far;
       if (wantNear && !t.near && !this.queue.some((q) => q.key === key && q.level === 'near')) this.queue.push({ key, level: 'near' });
       if (wantFar && !t.far && !this.queue.some((q) => q.key === key && q.level === 'far')) this.queue.push({ key, level: 'far' });
       if (t.near) t.near.visible = wantNear || (wantFar && !t.far);
       if (t.far) t.far.visible = wantFar;
       // free memory far away
-      if (d > FAR + 2000) {
+      if (d > far + 2000) {
         for (const lvl of ['near', 'far'] as const) {
           const m = t[lvl];
           if (m) {

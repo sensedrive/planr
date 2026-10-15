@@ -10,6 +10,7 @@ export interface Settings {
   aircraft: AircraftId;
   mission: MissionId;
   wind: WindSetting;
+  sky: 'clear' | 'clouds' | 'rain' | 'live';
   time: TimeOfDay;
   realism: 'simple' | 'real';
   failure: 'off' | 'random' | 'takeoff';
@@ -80,6 +81,16 @@ export const OPTIONS: OptionDef[] = [
     ],
   },
   {
+    key: 'sky',
+    label: 'Wetter',
+    choices: [
+      { value: 'clear', label: 'Klar' },
+      { value: 'clouds', label: 'Bewölkt' },
+      { value: 'rain', label: 'Regen' },
+      { value: 'live', label: 'Live (KLGA)', only: ['nyc'] },
+    ],
+  },
+  {
     key: 'time',
     label: 'Tageszeit',
     choices: [
@@ -143,6 +154,7 @@ export const DEFAULT_SETTINGS: Settings = {
   aircraft: 'c172',
   mission: 'free',
   wind: 'light',
+  sky: 'clouds',
   time: 'day',
   realism: 'real',
   failure: 'off',
@@ -169,6 +181,11 @@ export function saveSettings(s: Settings): void {
   } catch {
     // ignore
   }
+}
+
+/** Best results are kept per landscape and aircraft (`mission:scenario:aircraft`). */
+export function bestKey(mission: string, s: Pick<Settings, 'scenario' | 'aircraft'>): string {
+  return `${mission}:${s.scenario}:${s.aircraft}`;
 }
 
 export function loadBest(key: string): number | null {

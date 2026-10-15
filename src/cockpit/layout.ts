@@ -36,8 +36,9 @@ export function makeLayout(type: AircraftType): CockpitLayout {
     front: e.z - 0.7,
     panelX: cabin ? e.x + 0.13 : e.x,
     halfWidth: cabin ? 0.62 : 0.42,
-    stickPivot: v(0, -1.1, -0.35),
-    stickLength: 0.6,
+    // between the knees, a hand's width closer than a full-length stick
+    stickPivot: v(0, -1.05, -0.28),
+    stickLength: 0.56,
     throttlePivot: v(-0.2, -0.65, -0.2),
     throttleLength: 0.24,
     throttleMaxAngle: 0.4,

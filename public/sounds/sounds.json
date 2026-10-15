@@ -1,0 +1,52 @@
+[
+  {
+    "name": "c172-ground",
+    "base": 1100,
+    "loopStart": 0.05,
+    "loopEnd": 6.05,
+    "source": "https://freesound.org/s/443290/",
+    "author": "keng-wai-chane-chick-te",
+    "title": "PLANE_CESSNA152_STARTING_TAXING_GRASS",
+    "license": "CC0 1.0"
+  },
+  {
+    "name": "c172-low",
+    "base": 1020,
+    "loopStart": 0.05,
+    "loopEnd": 6.05,
+    "source": "https://freesound.org/s/444940/",
+    "author": "keng-wai-chane-chick-te",
+    "title": "PLANE_CESSNA152_FLIGHT",
+    "license": "CC0 1.0"
+  },
+  {
+    "name": "c172-cruise",
+    "base": 2390,
+    "loopStart": 0.05,
+    "loopEnd": 6.05,
+    "source": "https://freesound.org/s/444940/",
+    "author": "keng-wai-chane-chick-te",
+    "title": "PLANE_CESSNA152_FLIGHT",
+    "license": "CC0 1.0"
+  },
+  {
+    "name": "jet-low",
+    "base": 62,
+    "loopStart": 0.05,
+    "loopEnd": 6.05,
+    "source": "https://freesound.org/s/547050/",
+    "author": "szegvari",
+    "title": "Turbine plane SFX",
+    "license": "CC0 1.0"
+  },
+  {
+    "name": "jet-high",
+    "base": 95,
+    "loopStart": 0.05,
+    "loopEnd": 6.05,
+    "source": "https://freesound.org/s/205581/",
+    "author": "qubodup",
+    "title": "Jet Turbine Noise",
+    "license": "CC0 1.0"
+  }
+]

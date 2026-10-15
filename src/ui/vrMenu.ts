@@ -3,7 +3,7 @@ import { choiceAvailable, OPTIONS, type Settings } from '../game/settings';
 import type { MenuHandlers } from './menu';
 
 const W = 1024;
-const H = 1150;
+const H = 1240;
 const ROW_H = 84;
 const TOP = 110;
 const LABEL_W = 300;

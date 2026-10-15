@@ -13,6 +13,7 @@ und auf der Meta Quest 2 im Browser – mit greifbarem Steuerknüppel, Gashebel,
 | Flugzeug | Cessna-artig (Kolbenmotor, festes Fahrwerk) · Jet-Trainer (L-39-artig, Einziehfahrwerk) |
 | Mission | Freiflug · Luftstart · Landung (mit Wertung) · Ringparcours (Zeit) · Streckenflug zum zweiten Platz · Notwasserung im Hudson (New York) |
 | Wind | Ruhig · Leicht · Stark · Böig |
+| Wetter | Klar · Bewölkt · Regen (geschlossene Wolkendecke, Regen, schlechte Sicht) · Live (echte METAR von LaGuardia, nur New York) |
 | Tageszeit | Tag · Abend · Nacht (mit Pistenbefeuerung) |
 | Flugverhalten | Einfach · Realistisch (Propeller-Effekte, asymmetrischer Strömungsabriss, Trudeln) |
 | Motorausfall | Aus · Zufällig · Nach dem Start |
@@ -53,9 +54,20 @@ LB/RB Klappen · Steuerkreuz Trimmung · Y Kamera · Start Neustart · Back Men�
 Linker Stick: Seitenruder (links/rechts), Sitzhöhe (vor/zurück) · linker Trigger Bremse · X Ansicht zentrieren ·
 Y/B Klappen · rechter Stick vor/zurück Trimmung · A Neustart · Stick-Klick Menü (Laser + Trigger)
 
+**Handtracking (ohne Controller):** Faust schließen greift Knüppel und Hebel, Hand öffnen lässt los.
+Die Taster „MENÜ“ und „ZENTR.“ über den Instrumenten mit dem Zeigefinger antippen; im Menü wählt Daumen-Zeigefinger-Pinch.
+
 Tipps: Cessna – Vollgas, bei ~55 kn sanft ziehen, Steigflug ~70–75 kn, Landung mit Klappen bei ~60 kn.
 Jet – Startklappen sind gesetzt, bei ~105 kn rotieren, nach dem Abheben `G` (Fahrwerk) und Klappen hoch,
 Anflug mit Fahrwerk und vollen Klappen bei ~120–125 kn.
+
+## Sound
+
+Motorgeräusche aus echten CC0-Aufnahmen (freesound.org), nahtlos geschleift und nach Drehzahl überblendet:
+Cessna 152 im Flug und beim Rollen von *keng-wai-chane-chick-te* ([444940](https://freesound.org/s/444940/),
+[443290](https://freesound.org/s/443290/)), Turbinen von *qubodup* ([205581](https://freesound.org/s/205581/)) und
+*szegvari* ([547050](https://freesound.org/s/547050/)). Wind, Rollgeräusch, Aufsetzen, Motoren, Regen und
+Überziehwarnung sind synthetisiert. Neu schneiden: `node scripts/data/build-sounds.mjs <mp3-ordner> public/sounds`.
 
 ## Entwicklung
 

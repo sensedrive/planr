@@ -1,27 +1,18 @@
 import * as THREE from 'three';
 import type { ControlState } from '../core/input';
 import { Controls3D } from './controls3d';
+import { HeadUpDisplay, type HudData } from './hudDisplay';
+import { buildCabin, buildCanopy, type Dims } from './interior';
 import { type InstrumentConfig, type InstrumentData, Instruments } from './instruments';
 import type { CockpitLayout } from './layout';
+import { panelArt, plastic } from './textures';
 
-const wallMat = new THREE.MeshLambertMaterial({ color: 0x8a867d });
 const panelMat = new THREE.MeshLambertMaterial({ color: 0x2b2c2f });
-const floorMat = new THREE.MeshLambertMaterial({ color: 0x3a3936 });
-const seatMat = new THREE.MeshLambertMaterial({ color: 0x5a3a28 });
-const frameMat = new THREE.MeshLambertMaterial({ color: 0xd8d6d0 });
+const glareMat = new THREE.MeshLambertMaterial({ map: plastic('#26272a') });
 
 function box(w: number, h: number, d: number, x: number, y: number, z: number, mat: THREE.Material): THREE.Mesh {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
   m.position.set(x, y, z);
-  return m;
-}
-
-/** Thin bar between two points (window frames). */
-function bar(a: THREE.Vector3, b: THREE.Vector3, r: number, mat: THREE.Material): THREE.Mesh {
-  const len = a.distanceTo(b);
-  const m = new THREE.Mesh(new THREE.BoxGeometry(r, len, r), mat);
-  m.position.copy(a).add(b).multiplyScalar(0.5);
-  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
   return m;
 }
 
@@ -39,6 +30,7 @@ export class Cockpit {
   private readonly statusTex: THREE.CanvasTexture;
   private statusText = '-';
   private readonly arrow = new THREE.Group();
+  private hud: HeadUpDisplay | null = null;
 
   constructor(
     readonly layout: CockpitLayout,
@@ -58,46 +50,33 @@ export class Cockpit {
     const cx = cabin ? 0 : E.x;
     this.controls3d = new Controls3D(L);
 
-    g.add(box(halfW * 2, 0.03, back - front, cx, floorY, (front + back) / 2, floorMat));
-    for (const s of [-1, 1]) g.add(box(0.03, sillY - floorY, back - front, cx + s * halfW, (sillY + floorY) / 2, (front + back) / 2, wallMat));
-    // firewall below the panel
+    // firewall, panel body and glareshield
     g.add(box(halfW * 2, 0.4, 0.03, cx, floorY + 0.2, front - 0.05, panelMat));
-    // panel and glareshield
-    g.add(box(halfW * 2, 0.5, 0.08, cx, E.y - 0.5, front - 0.04, panelMat));
-    g.add(box(halfW * 2, 0.04, 0.22, cx, glareY, front + 0.07, panelMat));
+    g.add(box(halfW * 2, 0.5, 0.08, cx, E.y - 0.5, front - 0.045, panelMat));
+    g.add(box(halfW * 2, 0.04, 0.22, cx, glareY, front + 0.07, glareMat));
+
+    // panel face artwork (radios, engine gauges, switches); the six-pack sits on top of it
+    const panelLeft = cx - halfW;
+    const sixFrom = ((L.panelX - 0.42 - panelLeft) / (halfW * 2)) * 1024;
+    const sixTo = ((L.panelX + 0.42 - panelLeft) / (halfW * 2)) * 1024;
+    const faceGeo = new THREE.PlaneGeometry(halfW * 2, 0.5);
+    const uv = faceGeo.getAttribute('uv');
+    for (let i = 0; i < uv.count; i++) uv.setY(i, 0.5 + uv.getY(i) * 0.5);
+    const face = new THREE.Mesh(faceGeo, new THREE.MeshLambertMaterial({ map: panelArt(!cabin, sixFrom, sixTo) }));
+    face.position.set(cx, E.y - 0.5, front + 0.0005);
+    g.add(face);
 
     this.instruments = new Instruments(0.84, instrumentConfig);
     this.instruments.mesh.position.set(L.panelX, E.y - 0.4, front + 0.002);
     g.add(this.instruments.mesh);
 
-    if (cabin) {
-      const roofY = E.y + 0.35;
-      const roofFront = front + 0.35;
-      g.add(box(halfW * 2, 0.03, back - roofFront, cx, roofY, (back + roofFront) / 2, wallMat));
-      g.add(box(halfW * 2, roofY - floorY, 0.03, cx, (roofY + floorY) / 2, back, wallMat));
-      const a = (x: number) => new THREE.Vector3(cx + x, glareY, front + 0.05);
-      const r = (x: number) => new THREE.Vector3(cx + x, roofY, roofFront);
-      g.add(bar(a(-halfW), r(-halfW), 0.05, frameMat), bar(a(halfW), r(halfW), 0.05, frameMat));
-      g.add(bar(a(0), r(0), 0.025, frameMat));
-      for (const s of [-1, 1]) {
-        const x = cx + s * halfW;
-        g.add(bar(new THREE.Vector3(x, sillY, E.z + 0.8), new THREE.Vector3(x, roofY, E.z + 0.8), 0.06, frameMat));
-        g.add(bar(new THREE.Vector3(x, sillY, front + 0.05), new THREE.Vector3(x, sillY, back), 0.04, frameMat));
-      }
-      for (const x of [E.x, -E.x]) this.seat(x, floorY, E.z);
-    } else {
-      // canopy: windscreen bow and rails, the glass itself is left out for a clear view
-      const bowTop = E.y + 0.32;
-      const ws = (x: number, y: number, z: number) => new THREE.Vector3(cx + x, y, z);
-      g.add(bar(ws(-halfW, glareY, front + 0.05), ws(-0.3, bowTop, front + 0.5), 0.02, frameMat));
-      g.add(bar(ws(halfW, glareY, front + 0.05), ws(0.3, bowTop, front + 0.5), 0.02, frameMat));
-      g.add(bar(ws(-0.3, bowTop, front + 0.5), ws(0.3, bowTop, front + 0.5), 0.02, frameMat));
-      for (const s of [-1, 1]) g.add(bar(ws(s * halfW, sillY, front + 0.05), ws(s * halfW, sillY, back + 0.8), 0.04, frameMat));
-      // canopy arch behind the head
-      const arch = new THREE.Mesh(new THREE.TorusGeometry(halfW, 0.025, 6, 16, Math.PI), frameMat);
-      arch.position.set(cx, sillY, E.z + 0.55);
-      g.add(arch);
-      this.seat(E.x, floorY, E.z, true);
+    const dims: Dims = { cx, halfW, front, back, floorY, glareY, sillY };
+    if (cabin) buildCabin(g, L, dims);
+    else {
+      buildCanopy(g, L, dims);
+      this.hud = new HeadUpDisplay(E, new THREE.Vector3(E.x, E.y - 0.07, front + 0.16), 0.22);
+      this.hud.group.rotation.x = -0.12;
+      g.add(this.hud.group);
     }
 
     g.add(this.controls3d.group);
@@ -141,17 +120,10 @@ export class Cockpit {
     g.add(this.board);
   }
 
-  private seat(x: number, floorY: number, eyeZ: number, ejection = false): void {
-    const g = this.group;
-    g.add(box(0.48, 0.1, 0.5, x, floorY + 0.35, eyeZ + 0.35, seatMat));
-    const backrest = box(0.48, ejection ? 1.0 : 0.7, 0.1, x, floorY + (ejection ? 0.85 : 0.7), eyeZ + 0.62, seatMat);
-    backrest.rotation.x = -0.15;
-    g.add(backrest);
-  }
-
-  update(dt: number, c: ControlState, gearPosition: number, data: InstrumentData, status: string, target: THREE.Vector3 | null): void {
+  update(dt: number, c: ControlState, gearPosition: number, data: InstrumentData, status: string, target: THREE.Vector3 | null, hud: HudData): void {
     this.controls3d.update(c, gearPosition);
     this.instruments.update(dt, data);
+    this.hud?.update(dt, hud);
     this.setStatus(status);
     this.arrow.visible = target !== null;
     if (target) {

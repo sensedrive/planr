@@ -7,7 +7,7 @@ import { home, scenario } from '../world/scenario';
 import { surfaceHeight } from '../world/terrain';
 import { rateLanding } from './landing';
 import { RingCourse } from './rings';
-import { loadBest, type MissionId, saveBest, type Settings } from './settings';
+import { bestKey, loadBest, type MissionId, saveBest, type Settings } from './settings';
 import type { Weather } from './weather';
 
 const DEG = Math.PI / 180;
@@ -50,6 +50,17 @@ export class Missions {
     private readonly weather: Weather,
   ) {}
 
+  private settings: Pick<Settings, 'scenario' | 'aircraft'> = { scenario: 'alps', aircraft: 'c172' };
+
+  private key(mission: MissionId): string {
+    return bestKey(mission, this.settings);
+  }
+
+  /** Shows a message to the pilot (desktop HUD and VR board). */
+  announce(title: string, subtitle = '', seconds = 5): void {
+    this.notify(title, subtitle, seconds);
+  }
+
   private notify(title: string, subtitle = '', seconds = 5): void {
     this.notice = { title, subtitle, until: performance.now() + seconds * 1000 };
   }
@@ -65,7 +76,13 @@ export class Missions {
     switch (id) {
       case 'airstart': {
         const s = runwayStart();
-        s.position.y += 600;
+        // 600 m above the field, but always well clear of the terrain ahead (fjords, mountains)
+        let ahead = 0;
+        for (let d = 0; d <= 5000; d += 100) {
+          const p = runwayPoint(HOME, -HOME.length / 2 + d, 0);
+          ahead = Math.max(ahead, surfaceHeight(p.x, p.z));
+        }
+        s.position.y = Math.max(s.position.y + 600, ahead + 400);
         return { ...s, speed: t.cruise, spool: 0.65 };
       }
       case 'landing': {
@@ -94,6 +111,7 @@ export class Missions {
 
   start(settings: Settings, c: ControlState): void {
     const sc = scenario();
+    this.settings = { scenario: sc.id, aircraft: settings.aircraft };
     this.mission = sc.missions.includes(settings.mission) ? settings.mission : 'free';
     const a = this.aircraft;
     a.setType(AIRCRAFT[settings.aircraft]);
@@ -150,8 +168,8 @@ export class Missions {
     if (a.ditched && !this.finished) {
       this.finished = true;
       if (this.mission === 'ditching') {
-        const best = loadBest('ditching');
-        if (best === null || this.time < best) saveBest('ditching', this.time);
+        const best = loadBest(this.key('ditching'));
+        if (best === null || this.time < best) saveBest(this.key('ditching'), this.time);
       }
     }
     if (a.crashed) {
@@ -179,14 +197,14 @@ export class Missions {
       this.notify(r.title, r.detail, 7);
       if (this.mission === 'landing' && !this.finished) {
         this.finished = true;
-        const best = loadBest('landing');
-        if (best === null || r.stars > best) saveBest('landing', r.stars);
+        const best = loadBest(this.key('landing'));
+        if (best === null || r.stars > best) saveBest(this.key('landing'), r.stars);
       }
       if (this.mission === 'crosscountry' && !this.finished && r.airport === sc.destination && r.stars > 0) {
         this.finished = true;
-        const best = loadBest('crosscountry');
+        const best = loadBest(this.key('crosscountry'));
         const record = best === null || this.time < best;
-        if (record) saveBest('crosscountry', this.time);
+        if (record) saveBest(this.key('crosscountry'), this.time);
         this.notify(`Ziel erreicht in ${clock(this.time)}`, `${r.title.slice(0, 3)} · ${record ? 'neue Bestzeit!' : `Bestzeit ${clock(best!)}`}`, 9);
       }
     }
@@ -197,16 +215,16 @@ export class Missions {
         const aim = runwayPoint(HOME, -HOME.length / 2 + 300, 0);
         this.target = this.finished ? null : aim;
         const d = Math.hypot(a.pos.x - aim.x, a.pos.z - aim.z);
-        this.status = this.finished ? `Bestwert ${'★'.repeat(loadBest('landing') ?? 0)}` : `Aufsetzpunkt ${distance(d)} · ${Math.round(a.airspeedKt)} kn`;
+        this.status = this.finished ? `Bestwert ${'★'.repeat(loadBest(this.key('landing')) ?? 0)}` : `Aufsetzpunkt ${distance(d)} · ${Math.round(a.airspeedKt)} kn`;
         break;
       }
       case 'rings': {
         if (this.course.check(this.lastPos, a.pos)) {
           if (this.course.done) {
             this.finished = true;
-            const best = loadBest('rings');
+            const best = loadBest(this.key('rings'));
             const record = best === null || this.time < best;
-            if (record) saveBest('rings', this.time);
+            if (record) saveBest(this.key('rings'), this.time);
             this.notify(`Parcours geschafft: ${clock(this.time)}`, record ? 'Neue Bestzeit!' : `Bestzeit ${clock(best!)}`, 8);
           } else {
             this.notify(`Ring ${this.course.next}/${this.course.rings.length}`, clock(this.time), 1.5);

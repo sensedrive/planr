@@ -1,10 +1,15 @@
 import * as THREE from 'three';
 import { XRControllerModelFactory } from 'three/examples/jsm/webxr/XRControllerModelFactory.js';
+import { XRHandModelFactory } from 'three/examples/jsm/webxr/XRHandModelFactory.js';
 import type { Controls3D, Handle } from '../cockpit/controls3d';
 import { type Actions, clamp, type ControlState, createControlState, deadzone, stepFlaps } from '../core/input';
 
 interface Hand {
   grip: THREE.Group;
+  /** tracked hand (joints), used when the controller is put down */
+  xrHand: THREE.XRHandSpace;
+  /** fist closed (hand tracking) */
+  fist: boolean;
   source: XRInputSource | null;
   handle: Handle | null;
   /** grabbed handle position minus hand position at grab time (aircraft coords) */
@@ -17,6 +22,7 @@ interface Hand {
 }
 
 const GRAB_RADIUS = 0.11;
+const PRESS_RADIUS = 0.03;
 const tmpHand = new THREE.Vector3();
 const tmpGrip = new THREE.Vector3();
 const tmpDelta = new THREE.Vector3();
@@ -32,6 +38,7 @@ export class XRCockpitInput {
   private readonly hands: Hand[] = [];
   private stallPulse = 0;
   private controls: ControlState = createControlState();
+  private pressCooldown = 0;
 
   constructor(
     renderer: THREE.WebGLRenderer,
@@ -40,12 +47,18 @@ export class XRCockpitInput {
     private readonly actions: Actions,
   ) {
     const factory = new XRControllerModelFactory();
+    const handFactory = new XRHandModelFactory();
     for (let i = 0; i < 2; i++) {
       const grip = renderer.xr.getControllerGrip(i);
       grip.add(factory.createControllerModel(grip));
       rig.add(grip);
+      const xrHand = renderer.xr.getHand(i);
+      xrHand.add(handFactory.createHandModel(xrHand, 'spheres'));
+      rig.add(xrHand);
       const hand: Hand = {
         grip,
+        xrHand,
+        fist: false,
         source: null,
         handle: null,
         offset: new THREE.Vector3(),
@@ -74,9 +87,63 @@ export class XRCockpitInput {
     this.visuals = visuals;
   }
 
+  private joint(hand: Hand, name: string): THREE.Vector3 | null {
+    const j = (hand.xrHand.joints as Record<string, THREE.Group | undefined>)[name];
+    return j && j.visible !== false ? j.position : null;
+  }
+
+  private tracked(hand: Hand): boolean {
+    return !!hand.source?.hand;
+  }
+
+  /** Grip point in aircraft coordinates: the controller grip, or the middle knuckle of a tracked hand. */
   private handPosition(hand: Hand, out: THREE.Vector3): THREE.Vector3 {
     this.rig.updateMatrix();
-    return out.copy(hand.grip.position).applyMatrix4(this.rig.matrix);
+    const knuckle = this.tracked(hand) ? this.joint(hand, 'middle-finger-phalanx-proximal') : null;
+    return out.copy(knuckle ?? hand.grip.position).applyMatrix4(this.rig.matrix);
+  }
+
+  /** Hand tracking: a closed fist grabs, opening the hand lets go. */
+  private updateFist(hand: Hand): void {
+    const wrist = this.joint(hand, 'wrist');
+    if (!wrist) return;
+    let sum = 0;
+    let n = 0;
+    for (const tip of ['index-finger-tip', 'middle-finger-tip', 'ring-finger-tip']) {
+      const p = this.joint(hand, tip);
+      if (p) {
+        sum += p.distanceTo(wrist);
+        n++;
+      }
+    }
+    if (!n) return;
+    const d = sum / n;
+    if (!hand.fist && d < 0.095) {
+      hand.fist = true;
+      this.tryGrab(hand);
+    } else if (hand.fist && d > 0.12) {
+      hand.fist = false;
+      hand.handle = null;
+    }
+  }
+
+  /** Index finger (or controller) touching a cockpit push button. */
+  private updateButtons(dt: number): void {
+    this.pressCooldown -= dt;
+    if (this.pressCooldown > 0) return;
+    for (const hand of this.hands) {
+      if (!hand.source) continue;
+      const tip = this.tracked(hand) ? this.joint(hand, 'index-finger-tip') : null;
+      const p = tmpHand.copy(tip ?? hand.grip.position).applyMatrix4(this.rig.matrix);
+      for (const b of this.visuals.buttons) {
+        if (p.distanceTo(b.centre) < PRESS_RADIUS) {
+          this.pressCooldown = 0.8;
+          if (b.id === 'menu') this.actions.toggleMenu();
+          else this.actions.recenter();
+          return;
+        }
+      }
+    }
   }
 
   private nearest(p: THREE.Vector3, exclude: Hand | null): Handle | null {
@@ -116,6 +183,9 @@ export class XRCockpitInput {
 
   update(dt: number, c: ControlState, stall: boolean): void {
     this.controls = c;
+    this.rig.updateMatrix();
+    for (const hand of this.hands) if (this.tracked(hand)) this.updateFist(hand);
+    this.updateButtons(dt);
     let stickHeld = false;
     for (const hand of this.hands) {
       if (!hand.handle) continue;

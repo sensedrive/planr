@@ -9,7 +9,7 @@ import { FlightAudio } from './core/audio';
 import { type Actions, clamp, createControlState } from './core/input';
 import { FixedStepLoop } from './core/loop';
 import { Missions } from './game/missions';
-import { choiceAvailable, loadBest, loadSettings, OPTIONS, saveSettings, type Settings } from './game/settings';
+import { bestKey, choiceAvailable, loadBest, loadSettings, OPTIONS, saveSettings, type Settings } from './game/settings';
 import { Weather } from './game/weather';
 import { GamepadInput } from './input/gamepad';
 import { KeyboardInput } from './input/keyboardMouse';
@@ -28,7 +28,8 @@ import { type Scenario, type ScenarioId, setScenario } from './world/scenario';
 import { createAlps } from './world/scenarios/alps';
 import { createFjord } from './world/scenarios/fjord';
 import { loadNyc, type NycWorld } from './world/scenarios/nyc';
-import { Environment } from './world/sky';
+import { CLEAR_WEATHER, Environment, type WeatherLook } from './world/sky';
+import { fetchMetar, type Metar } from './game/metar';
 import { createWater, surfaceHeight, Terrain, terrainHeight } from './world/terrain';
 
 // ---- renderer & scene -------------------------------------------------------
@@ -40,7 +41,7 @@ renderer.xr.enabled = true;
 renderer.xr.setReferenceSpaceType('local-floor');
 renderer.xr.setFoveation(1);
 document.body.appendChild(renderer.domElement);
-document.body.appendChild(VRButton.createButton(renderer));
+document.body.appendChild(VRButton.createButton(renderer, { optionalFeatures: ['hand-tracking'] }));
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.05, 9000);
@@ -130,10 +131,17 @@ async function useScenario(id: ScenarioId): Promise<void> {
 
 function bestText(): string {
   const fmt = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, '0')}`;
-  const l = loadBest('landing');
-  const r = loadBest('rings');
-  const c = loadBest('crosscountry');
-  const parts = [l !== null ? `Landung ${'★'.repeat(l) || '–'}` : null, r !== null ? `Ringe ${fmt(r)}` : null, c !== null ? `Bergflug ${fmt(c)}` : null];
+  const sel = { scenario: activeScenario ?? settings.scenario, aircraft: settings.aircraft };
+  const l = loadBest(bestKey('landing', sel));
+  const r = loadBest(bestKey('rings', sel));
+  const c = loadBest(bestKey('crosscountry', sel));
+  const d = loadBest(bestKey('ditching', sel));
+  const parts = [
+    l !== null ? `Landung ${'★'.repeat(l) || '–'}` : null,
+    r !== null ? `Ringe ${fmt(r)}` : null,
+    c !== null ? `Strecke ${fmt(c)}` : null,
+    d !== null ? `Wasserung ${fmt(d)}` : null,
+  ];
   const list = parts.filter(Boolean).join(' · ');
   const best = list ? `Bestwerte: ${list}` : '';
   return activeScenario === 'nyc' && nyc ? [best, nyc.attribution].filter(Boolean).join(' — ') : best;
@@ -150,7 +158,37 @@ function useAircraft(id: AircraftId): void {
   cockpitMouse.visuals = current.cockpit.controls3d;
 }
 
+let metar: Metar | null = null;
+let metarPromise: Promise<void> | null = null;
+
+/** Sky look for the selected weather; "live" uses the latest LaGuardia METAR. */
+function skyLook(): WeatherLook {
+  switch (settings.sky) {
+    case 'clear':
+      return CLEAR_WEATHER;
+    case 'rain':
+      return { coverage: 0.85, base: Math.min(650, scenarioCloudBase()), overcast: true, rain: 1, visibility: 3500 };
+    case 'live':
+      if (metar) return metar.look;
+      metarPromise ??= fetchMetar()
+        .then((m) => {
+          metar = m;
+          applyLive();
+        })
+        .catch((e) => console.warn('METAR unavailable', e))
+        .finally(() => (metarPromise = null));
+      return { coverage: 0.5, base: null, overcast: false, rain: 0, visibility: 16000 };
+    default:
+      return { coverage: 0.55, base: null, overcast: false, rain: 0, visibility: 16000 };
+  }
+}
+
+function scenarioCloudBase(): number {
+  return activeScenario === 'nyc' && nyc ? nyc.scenario.cloudBase : (scenarios[activeScenario ?? 'alps']?.cloudBase ?? 1100);
+}
+
 function applyLive(): void {
+  env.setWeather(skyLook());
   vignette.enabled = settings.vignette === 'on';
   cameraRig.seat = settings.seat;
   stickConfig.travel = settings.stick;
@@ -178,6 +216,14 @@ async function startFlight(override?: Partial<Settings>): Promise<void> {
   }
   useAircraft(settings.aircraft);
   missions.start({ ...settings, ...override }, controls);
+  if (settings.sky === 'live') {
+    if (!metar) await metarPromise;
+    if (metar) {
+      weather.configureLive(metar.windFrom, metar.windKt, metar.gustKt);
+      missions.announce('Live-Wetter LaGuardia', metar.raw.replace(/^METAR\s+/, '').split(' RMK')[0], 9);
+    }
+  }
+  applyLive();
   aircraft.interpolate(1, aircraftRoot);
   terrain.update(aircraft.pos.x, aircraft.pos.z, Infinity);
   city?.update(aircraft.pos.x, aircraft.pos.z, Infinity);
@@ -191,9 +237,13 @@ async function startFlight(override?: Partial<Settings>): Promise<void> {
 const handlers: MenuHandlers = {
   change(key, value) {
     (settings as unknown as Record<string, string | number>)[key] = value;
-    // a mission that does not exist in the new landscape falls back to free flight
-    const mission = OPTIONS.find((o) => o.key === 'mission')!.choices.find((c) => c.value === settings.mission);
-    if (mission && !choiceAvailable(mission, settings)) settings.mission = 'free';
+    // choices that do not exist in the new landscape fall back to the first available one
+    for (const opt of OPTIONS) {
+      const chosen = opt.choices.find((c) => c.value === settings[opt.key]);
+      if (chosen && !choiceAvailable(chosen, settings)) {
+        (settings as unknown as Record<string, string | number>)[opt.key] = opt.choices.find((c) => choiceAvailable(c, settings))!.value;
+      }
+    }
     saveSettings(settings);
     applyLive();
   },
@@ -237,10 +287,16 @@ const keyboard = new KeyboardInput(actions, renderer.domElement);
 const gamepad = new GamepadInput(actions);
 const xrInput = new XRCockpitInput(renderer, cameraRig.xrRig, current.cockpit.controls3d, actions);
 const vrMenu = new VRMenu(renderer, cameraRig.xrRig, aircraftRoot, settings, handlers);
-const cockpitMouse = new CockpitMouse(camera, renderer.domElement, controls, (label) => {
-  hintText = label;
-  hintUntil = performance.now() + 1200;
-});
+const cockpitMouse = new CockpitMouse(
+  camera,
+  renderer.domElement,
+  controls,
+  (label) => {
+    hintText = label;
+    hintUntil = performance.now() + 1200;
+  },
+  (id) => (id === 'menu' ? actions.toggleMenu() : actions.recenter()),
+);
 let hintText = '';
 let hintUntil = 0;
 
@@ -291,6 +347,8 @@ const loop = new FixedStepLoop(1 / 120);
 const timer = new THREE.Timer();
 const viewer = new THREE.Vector3();
 let fps = 60;
+let waveTime = 0;
+let lastTouchdown: unknown = null;
 
 function windText(): string {
   if (weather.baseKt === 0) return 'ruhig';
@@ -321,6 +379,10 @@ renderer.setAnimationLoop((time) => {
     missions.update(dt);
   }
   const alpha = running ? loop.advance(dt, (step) => aircraft.step(step, controls, surfaceHeight, weather.current)) : 1;
+  if (aircraft.touchdown && !lastTouchdown) audio.touchdown(aircraft.touchdown.vsFpm, aircraft.touchdown.airspeedKt / 1.944);
+  lastTouchdown = aircraft.touchdown;
+  // gear or flaps travelling → electric motor sound
+  const motors = Math.abs(aircraft.flaps - controls.flaps) > 0.01 || (aircraft.gear > 0.01 && aircraft.gear < 0.99);
   aircraft.interpolate(alpha, aircraftRoot);
   const pos = aircraftRoot.position;
 
@@ -357,13 +419,29 @@ renderer.setAnimationLoop((time) => {
       },
       missions.status || `Wind ${windStr}`,
       missions.target,
+      {
+        pitchDeg: aircraft.pitchDeg,
+        rollDeg: aircraft.rollDeg,
+        headingDeg: aircraft.headingDeg,
+        airspeedKt: aircraft.airspeedKt,
+        altitudeFt: aircraft.altitudeFt,
+        vsFpm: aircraft.verticalSpeedFpm,
+        alphaDeg: (aircraft.aero.alpha * 180) / Math.PI,
+        betaDeg: (aircraft.aero.beta * 180) / Math.PI,
+        gear: current.type.retractableGear ? aircraft.gear : 0,
+        throttle: controls.throttle,
+      },
     );
   }
 
   terrain.update(pos.x, pos.z, xr ? 2 : 4);
-  city?.update(pos.x, pos.z, xr ? 2 : 3);
-  env.update(dt, pos);
+  // in VR every frame is drawn twice: keep the city's far detail range shorter there
+  city?.update(pos.x, pos.z, xr ? 2 : 3, xr ? 3600 : undefined);
+  env.update(dt, pos, aircraft.vel);
   water.position.set(Math.round(pos.x / 100) * 100, 0, Math.round(pos.z / 100) * 100);
+  // drifting waves (texture offset in tiles; the plane snaps by whole tiles)
+  waveTime += dt;
+  water.material.normalMap!.offset.set((waveTime * 0.011) % 1, (waveTime * 0.007) % 1);
   cameraRig.update(dt);
   camera.getWorldPosition(viewer);
   for (const a of airfields) a.update(viewer, weather.current);
@@ -400,8 +478,20 @@ renderer.setAnimationLoop((time) => {
     hud.update(dt, aircraft, controls, fps, windStr, missions.status);
   }
 
-  audio.update(aircraft.engine.rpm, aircraft.engine.spool, aircraft.aero.airspeed, aircraft.stallWarning, aircraft.crashed || !running, current.type.id === 'jet');
+  audio.update({
+    rpm: aircraft.engine.rpm,
+    power: aircraft.engine.spool,
+    airspeed: aircraft.aero.airspeed,
+    groundSpeed: Math.hypot(aircraft.vel.x, aircraft.vel.z),
+    onGround: aircraft.onGround,
+    stall: aircraft.stallWarning,
+    silent: aircraft.crashed || !running,
+    jet: current.type.id === 'jet',
+    inCockpit,
+    motors,
+    rain: env.rainLevel,
+  });
   renderer.render(scene, camera);
 });
 
-if (import.meta.env.DEV) Object.assign(window, { sim: { renderer, scene, camera, variants, aircraft, controls, actions, cameraRig, missions, settings, weather, OPTIONS } });
+if (import.meta.env.DEV) Object.assign(window, { sim: { renderer, scene, camera, terrain, env, variants, aircraft, controls, actions, cameraRig, missions, settings, weather, OPTIONS } });

@@ -19,6 +19,7 @@ export class CockpitMouse {
     private readonly dom: HTMLElement,
     private readonly controls: ControlState,
     private readonly onHint: (label: string) => void,
+    private readonly onButton: (id: 'menu' | 'recenter') => void = () => {},
   ) {
     dom.addEventListener('contextmenu', (e) => e.preventDefault());
     dom.addEventListener('pointerdown', (e) => {
@@ -28,6 +29,11 @@ export class CockpitMouse {
       const d = this.down;
       this.down = null;
       if (!d || !this.enabled || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4) return;
+      const button = this.pickButton(e);
+      if (button) {
+        this.onButton(button);
+        return;
+      }
       const handle = this.pick(e);
       if (!handle?.click) return;
       handle.click(this.controls, d.button === 2 ? -1 : 1);
@@ -44,6 +50,18 @@ export class CockpitMouse {
         this.dom.style.cursor = glow ? 'pointer' : '';
       }
     });
+  }
+
+  private pickButton(e: PointerEvent): 'menu' | 'recenter' | null {
+    if (!this.visuals) return null;
+    const r = this.dom.getBoundingClientRect();
+    this.ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    this.raycaster.setFromCamera(this.ndc, this.camera);
+    const hit = this.raycaster.intersectObjects(
+      this.visuals.buttons.map((b) => b.mesh),
+      false,
+    )[0];
+    return hit ? (this.visuals.buttons.find((b) => b.mesh === hit.object)?.id ?? null) : null;
   }
 
   private pick(e: PointerEvent) {

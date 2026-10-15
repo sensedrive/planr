@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import { runwayLocal } from './airports';
 import { scenario } from './scenario';
+import { applyTerrainDetail, waterNormalTexture } from './surfaces';
 
 export { mulberry32 } from './noise';
 
 const CHUNK_SIZE = 1500;
 /** Grid spacing of the finest terrain LOD; collision uses exactly this surface. */
-const FINE_SEGS = 64;
+const FINE_SEGS = 80;
 const FINE_STEP = CHUNK_SIZE / FINE_SEGS;
 
 /** Analytic ground height in metres for the active scenario; negative values are under water (sea level = 0). */
@@ -59,7 +60,15 @@ export function surfaceHeight(x: number, z: number): number {
 const tmpC = new THREE.Color();
 
 /** Builds one terrain chunk with a downward skirt that hides LOD cracks. */
-function buildChunkGeometry(x0: number, z0: number, size: number, segs: number): THREE.BufferGeometry {
+/** Neighbour resolutions along the chunk edges: z = 0 (north), z = size (south), x = 0 (west), x = size (east). */
+interface EdgeSegs {
+  n: number;
+  s: number;
+  w: number;
+  e: number;
+}
+
+function buildChunkGeometry(x0: number, z0: number, size: number, segs: number, edges: EdgeSegs): THREE.BufferGeometry {
   const n = segs + 1;
   const step = size / segs;
   // heights with a one-sample border for normals
@@ -69,6 +78,28 @@ function buildChunkGeometry(x0: number, z0: number, size: number, segs: number):
     for (let i = 0; i < g; i++) heights[j * g + i] = terrainHeight(x0 + (i - 1) * step, z0 + (j - 1) * step);
   }
   const H = (i: number, j: number) => heights[(j + 1) * g + (i + 1)];
+  const setH = (i: number, j: number, v: number) => {
+    heights[(j + 1) * g + (i + 1)] = v;
+  };
+  // stitch edges to coarser neighbours: their edge is a straight line between every `ratio`-th vertex,
+  // so put ours exactly on it – no cracks between detail levels
+  const stitch = (other: number, at: (t: number) => [number, number]) => {
+    if (other >= segs) return;
+    const ratio = segs / other;
+    for (let t = 0; t <= segs; t++) {
+      const r = t % ratio;
+      if (r === 0) continue;
+      const a = at(t - r);
+      const b = at(t - r + ratio);
+      const f = r / ratio;
+      const [i, j] = at(t);
+      setH(i, j, H(a[0], a[1]) * (1 - f) + H(b[0], b[1]) * f);
+    }
+  };
+  stitch(edges.n, (t) => [t, 0]);
+  stitch(edges.s, (t) => [t, segs]);
+  stitch(edges.w, (t) => [0, t]);
+  stitch(edges.e, (t) => [segs, t]);
 
   const skirtVerts = 4 * n;
   const count = n * n + skirtVerts;
@@ -108,15 +139,15 @@ function buildChunkGeometry(x0: number, z0: number, size: number, segs: number):
 
   // skirt: duplicate each border ring vertex lowered by `drop`
   const drop = step * 1.5 + 15;
-  const edges: number[][] = [[], [], [], []];
+  const rims: number[][] = [[], [], [], []];
   for (let t = 0; t < n; t++) {
-    edges[0].push(t); // z = 0
-    edges[1].push(segs * n + t); // z = size
-    edges[2].push(t * n); // x = 0
-    edges[3].push(t * n + segs); // x = size
+    rims[0].push(t); // z = 0
+    rims[1].push(segs * n + t); // z = size
+    rims[2].push(t * n); // x = 0
+    rims[3].push(t * n + segs); // x = size
   }
   let v = n * n;
-  for (const edge of edges) {
+  for (const edge of rims) {
     const start = v;
     for (const src of edge) {
       pos[v * 3] = pos[src * 3];
@@ -149,13 +180,14 @@ function buildChunkGeometry(x0: number, z0: number, size: number, segs: number):
 
 interface Chunk {
   mesh: THREE.Mesh;
-  segs: number;
+  /** resolution plus neighbour resolutions it was stitched to */
+  sig: string;
 }
 
 const RADIUS = 3;
 
 function segsForRing(ring: number): number {
-  return ring <= 1 ? FINE_SEGS : ring === 2 ? 32 : 16;
+  return ring <= 1 ? FINE_SEGS : ring === 2 ? 40 : 20;
 }
 
 /** Streams terrain chunks around the aircraft with distance-based detail. */
@@ -164,10 +196,11 @@ export class Terrain {
   private readonly chunks = new Map<string, Chunk>();
   private readonly material = new THREE.MeshLambertMaterial({ vertexColors: true });
   private centerKey = '';
-  private queue: { cx: number; cz: number; segs: number; dist: number }[] = [];
+  private queue: { cx: number; cz: number; segs: number; edges: EdgeSegs; sig: string; dist: number }[] = [];
 
   constructor() {
     this.group.name = 'terrain';
+    applyTerrainDetail(this.material);
   }
 
   /** Drops all chunks, e.g. after switching the scenario. */
@@ -193,7 +226,7 @@ export class Terrain {
     const start = performance.now();
     while (this.queue.length > 0 && (budgetMs === Infinity || performance.now() - start < budgetMs)) {
       const job = this.queue.shift()!;
-      this.build(job.cx, job.cz, job.segs);
+      this.build(job.cx, job.cz, job.segs, job.edges, job.sig);
     }
   }
 
@@ -205,10 +238,15 @@ export class Terrain {
         const cx = ccx + dx;
         const cz = ccz + dz;
         const k = `${cx},${cz}`;
-        const ring = Math.max(Math.abs(dx), Math.abs(dz));
-        const segs = segsForRing(ring);
+        const segsAt = (ddx: number, ddz: number) => {
+          const ring = Math.max(Math.abs(ddx), Math.abs(ddz));
+          return ring > RADIUS ? segsForRing(Math.max(Math.abs(dx), Math.abs(dz))) : segsForRing(ring);
+        };
+        const segs = segsAt(dx, dz);
+        const edges = { n: segsAt(dx, dz - 1), s: segsAt(dx, dz + 1), w: segsAt(dx - 1, dz), e: segsAt(dx + 1, dz) };
+        const sig = `${segs}:${edges.n},${edges.s},${edges.w},${edges.e}`;
         wanted.add(k);
-        if (this.chunks.get(k)?.segs !== segs) this.queue.push({ cx, cz, segs, dist: dx * dx + dz * dz });
+        if (this.chunks.get(k)?.sig !== sig) this.queue.push({ cx, cz, segs, edges, sig, dist: dx * dx + dz * dz });
       }
     }
     this.queue.sort((a, b) => a.dist - b.dist);
@@ -221,10 +259,10 @@ export class Terrain {
     }
   }
 
-  private build(cx: number, cz: number, segs: number): void {
+  private build(cx: number, cz: number, segs: number, edges: EdgeSegs, sig: string): void {
     const k = `${cx},${cz}`;
     const old = this.chunks.get(k);
-    const geo = buildChunkGeometry(cx * CHUNK_SIZE, cz * CHUNK_SIZE, CHUNK_SIZE, segs);
+    const geo = buildChunkGeometry(cx * CHUNK_SIZE, cz * CHUNK_SIZE, CHUNK_SIZE, segs, edges);
     const mesh = new THREE.Mesh(geo, this.material);
     mesh.position.set(cx * CHUNK_SIZE, 0, cz * CHUNK_SIZE);
     mesh.matrixAutoUpdate = false;
@@ -234,15 +272,24 @@ export class Terrain {
       this.group.remove(old.mesh);
       old.mesh.geometry.dispose();
     }
-    this.chunks.set(k, { mesh, segs });
+    this.chunks.set(k, { mesh, sig });
   }
 }
 
 /** Sea plane that follows the aircraft. */
-export function createWater(): THREE.Mesh<THREE.PlaneGeometry, THREE.MeshLambertMaterial> {
-  const geo = new THREE.PlaneGeometry(16000, 16000);
+const WATER_SIZE = 16000;
+/** wave texture tile (m); the plane snaps by multiples of it so the waves never jump */
+export const WATER_TILE = 50;
+
+/** Sea plane that follows the aircraft, with moving waves and sun glints. */
+export function createWater(): THREE.Mesh<THREE.PlaneGeometry, THREE.MeshPhongMaterial> {
+  const geo = new THREE.PlaneGeometry(WATER_SIZE, WATER_SIZE);
   geo.rotateX(-Math.PI / 2);
-  const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: 0x2f6f8f }));
+  const normals = waterNormalTexture().clone();
+  normals.needsUpdate = true;
+  normals.repeat.set(WATER_SIZE / WATER_TILE, WATER_SIZE / WATER_TILE);
+  const mat = new THREE.MeshPhongMaterial({ color: 0x2f6f8f, specular: 0x9aa6b0, shininess: 90, normalMap: normals, normalScale: new THREE.Vector2(0.55, 0.55) });
+  const mesh = new THREE.Mesh(geo, mat);
   mesh.name = 'water';
   return mesh;
 }

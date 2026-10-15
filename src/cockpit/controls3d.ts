@@ -19,6 +19,34 @@ export interface Handle {
   click?(c: ControlState, dir: 1 | -1): void;
 }
 
+/** Push buttons for VR without controllers (tapped with the index finger) and for desktop clicks. */
+export interface CockpitButton {
+  id: 'menu' | 'recenter';
+  mesh: THREE.Mesh;
+  /** aircraft coordinates */
+  centre: THREE.Vector3;
+}
+
+function buttonTexture(text: string): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 128;
+  c.height = 64;
+  const ctx = c.getContext('2d')!;
+  ctx.fillStyle = '#1d2024';
+  ctx.fillRect(0, 0, 128, 64);
+  ctx.strokeStyle = '#6a7380';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(2, 2, 124, 60);
+  ctx.fillStyle = '#e8eef4';
+  ctx.font = 'bold 26px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 64, 34);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
 /** hand travel (m) for full stick deflection; adjustable in the menu */
 export const stickConfig = { travel: 0.13 };
 
@@ -41,6 +69,7 @@ function glowSphere(r = 0.06): THREE.Mesh {
 export class Controls3D {
   readonly group = new THREE.Group();
   readonly handles: Handle[] = [];
+  readonly buttons: CockpitButton[] = [];
   private readonly stick = new THREE.Group();
   private readonly lever = new THREE.Group();
   private readonly flapLever = new THREE.Group();
@@ -209,6 +238,18 @@ export class Controls3D {
     };
     knob3(this.trimRollKnob, L.trimRollKnob, 'trimRoll', 'Querrudertrimmung', 'trimRoll');
     knob3(this.trimYawKnob, L.trimYawKnob, 'trimYaw', 'Seitenrudertrimmung', 'trimYaw');
+
+    // --- push buttons above the six-pack: menu and recenter (for hand tracking)
+    (['menu', 'recenter'] as const).forEach((id, i) => {
+      const centre = new THREE.Vector3(L.eye.x - 0.26 + i * 0.09, L.eye.y - 0.272, L.front + 0.012);
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(0.07, 0.035, 0.02),
+        [darkMat, darkMat, darkMat, darkMat, new THREE.MeshBasicMaterial({ map: buttonTexture(id === 'menu' ? 'MENÜ' : 'ZENTR.'), toneMapped: false }), darkMat],
+      );
+      mesh.position.copy(centre);
+      g.add(mesh);
+      this.buttons.push({ id, mesh, centre });
+    });
 
     // --- rudder pedals
     const pedalGeo = new THREE.BoxGeometry(0.09, 0.14, 0.03);

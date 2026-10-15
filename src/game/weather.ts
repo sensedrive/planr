@@ -38,6 +38,15 @@ export class Weather {
     return Math.hypot(this.current.x, this.current.z) / KT;
   }
 
+  /** Real wind from a METAR: direction it comes from, mean speed and gusts (kt). */
+  configureLive(fromDeg: number, speedKt: number, gustKt: number): void {
+    this.baseKt = speedKt;
+    this.fromDeg = fromDeg;
+    this.gust = speedKt > 0 ? Math.max(0, gustKt - speedKt) / Math.max(speedKt, 1) : 0;
+    this.turbulence = Math.min(2, 0.2 + speedKt * 0.06 + this.gust);
+    this.current.set(0, 0, 0);
+  }
+
   update(dt: number, heightAboveGround: number): void {
     this.t += dt;
     const n = this.noise;
