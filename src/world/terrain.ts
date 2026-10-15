@@ -1,55 +1,51 @@
 import * as THREE from 'three';
-import { createNoise2D } from 'simplex-noise';
+import { AIRPORTS, runwayLocal } from './airports';
+import { noiseC, noiseD, rawHeight } from './noise';
 
-export function mulberry32(seed: number): () => number {
-  let a = seed;
-  return () => {
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+export { mulberry32 } from './noise';
 
-const rand = mulberry32(1337);
-const noiseA = createNoise2D(rand);
-const noiseB = createNoise2D(rand);
-const noiseC = createNoise2D(rand);
-const noiseD = createNoise2D(rand);
+const CHUNK_SIZE = 1500;
+/** Grid spacing of the finest terrain LOD; collision uses exactly this surface. */
+const FINE_SEGS = 64;
+const FINE_STEP = CHUNK_SIZE / FINE_SEGS;
 
-/** Runway along the Z axis, centred at the origin; heading 36 points to -Z. */
-export const RUNWAY = { length: 1200, width: 30, elevation: 30 };
-
-function fbm(x: number, z: number, octaves: number): number {
-  let sum = 0;
-  let amp = 1;
-  let freq = 1;
-  let norm = 0;
-  for (let i = 0; i < octaves; i++) {
-    sum += amp * noiseA(x * freq, z * freq);
-    norm += amp;
-    amp *= 0.5;
-    freq *= 2.03;
-  }
-  return sum / norm;
-}
-
-/** Ground height in metres; negative values are under water (sea level = 0). */
+/** Analytic ground height in metres; negative values are under water (sea level = 0). */
 export function terrainHeight(x: number, z: number): number {
-  let h = 35 + fbm(x * 0.00045, z * 0.00045, 5) * 170;
-  const m = noiseB(x * 0.00011, z * 0.00011);
-  const ridge = 1 - Math.abs(noiseC(x * 0.0005, z * 0.0005));
-  if (m > 0) h += Math.pow(m, 1.6) * (700 + ridge * ridge * 700);
-
-  // flatten the airfield
-  const dx = Math.max(0, Math.abs(x) - (RUNWAY.width / 2 + 150));
-  const dz = Math.max(0, Math.abs(z) - (RUNWAY.length / 2 + 300));
-  const t = THREE.MathUtils.smoothstep(Math.hypot(dx, dz), 0, 1000);
-  h = RUNWAY.elevation + (h - RUNWAY.elevation) * t;
-
+  let h = rawHeight(x, z);
+  // flatten the airfields
+  for (const a of AIRPORTS) {
+    const p = runwayLocal(a, x, z);
+    const dl = Math.max(0, Math.abs(p.lateral) - (a.width / 2 + 150));
+    const da = Math.max(0, Math.abs(p.along) - (a.length / 2 + 300));
+    const t = THREE.MathUtils.smoothstep(Math.hypot(dl, da), 0, 1000);
+    h = a.center.y + (h - a.center.y) * t;
+  }
   // steeper underwater slopes keep shorelines crisp
   if (h < 0) h = h * 2.5 - 1.5;
   return h;
+}
+
+/**
+ * Height of the rendered (finest LOD) triangle mesh, so wheels touch what you see.
+ * Same grid and diagonal as buildChunkGeometry.
+ */
+export function surfaceHeight(x: number, z: number): number {
+  const gx = x / FINE_STEP;
+  const gz = z / FINE_STEP;
+  const i = Math.floor(gx);
+  const j = Math.floor(gz);
+  const fx = gx - i;
+  const fz = gz - j;
+  const x0 = i * FINE_STEP;
+  const z0 = j * FINE_STEP;
+  const hb = terrainHeight(x0 + FINE_STEP, z0);
+  const hc = terrainHeight(x0, z0 + FINE_STEP);
+  if (fx + fz <= 1) {
+    const ha = terrainHeight(x0, z0);
+    return ha + (hb - ha) * fx + (hc - ha) * fz;
+  }
+  const hd = terrainHeight(x0 + FINE_STEP, z0 + FINE_STEP);
+  return hd + (hc - hd) * (1 - fx) + (hb - hd) * (1 - fz);
 }
 
 const C_SAND = new THREE.Color(0xc9b98a);
@@ -166,11 +162,10 @@ interface Chunk {
   segs: number;
 }
 
-const CHUNK_SIZE = 1500;
 const RADIUS = 3;
 
 function segsForRing(ring: number): number {
-  return ring <= 1 ? 64 : ring === 2 ? 32 : 16;
+  return ring <= 1 ? FINE_SEGS : ring === 2 ? 32 : 16;
 }
 
 /** Streams terrain chunks around the aircraft with distance-based detail. */

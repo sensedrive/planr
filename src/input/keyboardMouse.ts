@@ -10,6 +10,7 @@ export class KeyboardInput {
   private readonly keys = new Set<string>();
   private wheel = 0;
   private flapSteps = 0;
+  private gearToggles = 0;
 
   constructor(
     private readonly actions: Actions,
@@ -40,6 +41,9 @@ export class KeyboardInput {
       case 'KeyV':
         this.flapSteps--;
         break;
+      case 'KeyG':
+        this.gearToggles++;
+        break;
       case 'KeyC':
         this.actions.toggleCamera();
         break;
@@ -58,6 +62,9 @@ export class KeyboardInput {
       case 'KeyH':
         this.actions.toggleHelp();
         break;
+      case 'Escape':
+        this.actions.toggleMenu();
+        break;
     }
   }
 
@@ -70,15 +77,18 @@ export class KeyboardInput {
   }
 
   update(dt: number, c: ControlState): void {
-    this.pitch = approachAxis(this.pitch, this.axis(['KeyS', 'ArrowDown'], ['KeyW', 'ArrowUp']), dt);
-    this.roll = approachAxis(this.roll, this.axis(['KeyD', 'ArrowRight'], ['KeyA', 'ArrowLeft']), dt);
+    // pitch and roll build up gently so a tap does not slam the controls
+    this.pitch = approachAxis(this.pitch, this.axis(['KeyS', 'ArrowDown'], ['KeyW', 'ArrowUp']), dt, 1.5);
+    this.roll = approachAxis(this.roll, this.axis(['KeyD', 'ArrowRight'], ['KeyA', 'ArrowLeft']), dt, 1.8);
     this.yaw = approachAxis(this.yaw, this.axis(['KeyE'], ['KeyQ']), dt);
 
     let thr = this.axis(['ShiftLeft', 'ShiftRight'], ['KeyX']) * 0.5 * dt;
     thr -= this.wheel * 0.0007;
     this.wheel = 0;
     c.throttle = clamp(c.throttle + thr, 0, 1);
-    c.trim = clamp(c.trim + this.axis(['KeyT'], ['KeyG']) * 0.35 * dt);
+    c.trim = clamp(c.trim + this.axis(['Period'], ['Comma']) * 0.35 * dt);
+    if (this.gearToggles % 2 === 1) c.gear = c.gear >= 0.5 ? 0 : 1;
+    this.gearToggles = 0;
     if (this.down('KeyB', 'Space')) c.brake = 1;
     while (this.flapSteps !== 0) {
       const dir = Math.sign(this.flapSteps);

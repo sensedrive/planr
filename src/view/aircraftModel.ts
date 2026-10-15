@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { clamp, type ControlState } from '../core/input';
-import { AERO } from '../sim/aero';
+import type { ControlState } from '../core/input';
+import { aileron, C172_AERO, elevator, rudder } from '../sim/aero';
+import type { Aircraft } from '../sim/aircraft';
 
 const white = new THREE.MeshLambertMaterial({ color: 0xf2f1ec, flatShading: true });
 const red = new THREE.MeshLambertMaterial({ color: 0xb8322a, flatShading: true });
@@ -31,8 +32,16 @@ function surface(w: number, h: number, chord: number, hinge: THREE.Vector3, mat:
   return g;
 }
 
+/** What the main loop needs from an exterior model. */
+export interface AircraftVisual {
+  readonly root: THREE.Group;
+  /** parts hidden while sitting in the cockpit */
+  readonly fuselage: THREE.Group;
+  update(dt: number, c: ControlState, ac: Aircraft): void;
+}
+
 /** Low-poly high-wing single, matching the physics contact points. */
-export class AircraftModel {
+export class AircraftModel implements AircraftVisual {
   readonly root = new THREE.Group();
   /** fuselage parts that would block the view from the cockpit */
   readonly fuselage = new THREE.Group();
@@ -84,9 +93,9 @@ export class AircraftModel {
     const le = -1.05;
     const chord = 1.5;
     const hingeZ = le + chord - 0.35;
-    this.root.add(box(AERO.b, 0.14, chord - 0.35, 0, wingY, le + (chord - 0.35) / 2, white));
-    this.root.add(box(0.06, 0.15, chord - 0.3, -AERO.b / 2, wingY, le + chord / 2, red));
-    this.root.add(box(0.06, 0.15, chord - 0.3, AERO.b / 2, wingY, le + chord / 2, red));
+    this.root.add(box(C172_AERO.b, 0.14, chord - 0.35, 0, wingY, le + (chord - 0.35) / 2, white));
+    this.root.add(box(0.06, 0.15, chord - 0.3, -C172_AERO.b / 2, wingY, le + chord / 2, red));
+    this.root.add(box(0.06, 0.15, chord - 0.3, C172_AERO.b / 2, wingY, le + chord / 2, red));
     this.flapL = surface(2.5, 0.1, 0.35, new THREE.Vector3(-1.95, wingY, hingeZ), white);
     this.flapR = surface(2.5, 0.1, 0.35, new THREE.Vector3(1.95, wingY, hingeZ), white);
     this.aileronL = surface(2.2, 0.1, 0.35, new THREE.Vector3(-4.35, wingY, hingeZ), white);
@@ -121,18 +130,20 @@ export class AircraftModel {
     for (const s of [-1, 1]) this.root.add(rod(new THREE.Vector3(s * 0.5, -0.6, 0.25), new THREE.Vector3(s * 1.25, -1.0, 0.25), 0.04, dark));
   }
 
-  update(dt: number, c: ControlState, rpm: number, flaps: number, trim: number): void {
+  update(dt: number, c: ControlState, ac: Aircraft): void {
+    const rpm = ac.engine.rpm;
+    const flaps = ac.flaps;
+    const p = ac.type.aero;
     this.propAngle = (this.propAngle + (rpm / 60) * Math.PI * 2 * dt) % (Math.PI * 2);
     this.prop.rotation.z = this.propAngle;
     const fast = rpm > 900;
     this.blades.visible = !fast;
     this.disc.visible = fast;
 
-    const elev = clamp(c.pitch + trim * AERO.trimRange);
-    this.elevator.rotation.x = -elev * 0.4;
-    this.aileronR.rotation.x = -clamp(c.roll) * 0.3;
-    this.aileronL.rotation.x = clamp(c.roll) * 0.3;
-    this.rudder.rotation.y = clamp(c.yaw) * 0.4;
+    this.elevator.rotation.x = -elevator(p, c) * 0.4;
+    this.aileronR.rotation.x = -aileron(p, c) * 0.3;
+    this.aileronL.rotation.x = aileron(p, c) * 0.3;
+    this.rudder.rotation.y = rudder(p, c) * 0.4;
     this.flapL.rotation.x = this.flapR.rotation.x = flaps * 0.55;
   }
 }

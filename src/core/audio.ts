@@ -68,15 +68,24 @@ export class FlightAudio {
     if (this.ctx) this.master.gain.setTargetAtTime(this.muted ? 0 : 0.6, this.ctx.currentTime, 0.05);
   }
 
-  update(rpm: number, throttle: number, airspeed: number, stall: boolean, silent: boolean): void {
+  update(rpm: number, throttle: number, airspeed: number, stall: boolean, silent: boolean, jet = false): void {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
-    const firing = (rpm / 60) * 2; // two-blade prop pulses
-    this.engineOsc.frequency.setTargetAtTime(firing, t, 0.05);
-    this.engineOsc2.frequency.setTargetAtTime(firing * 0.5, t, 0.05);
-    this.engineFilter.frequency.setTargetAtTime(250 + throttle * 900, t, 0.1);
-    this.engineGain.gain.setTargetAtTime(silent ? 0 : 0.12 + throttle * 0.22, t, 0.1);
-    const w = Math.min(1, airspeed / 70);
+    if (jet) {
+      // turbine whine follows N1 (rpm = percent)
+      const whine = 300 + rpm * 9;
+      this.engineOsc.frequency.setTargetAtTime(whine, t, 0.1);
+      this.engineOsc2.frequency.setTargetAtTime(whine * 0.25, t, 0.1);
+      this.engineFilter.frequency.setTargetAtTime(700 + throttle * 2600, t, 0.2);
+      this.engineGain.gain.setTargetAtTime(silent || rpm < 20 ? 0 : 0.05 + throttle * 0.12, t, 0.2);
+    } else {
+      const firing = (rpm / 60) * 2; // two-blade prop pulses
+      this.engineOsc.frequency.setTargetAtTime(firing, t, 0.05);
+      this.engineOsc2.frequency.setTargetAtTime(firing * 0.5, t, 0.05);
+      this.engineFilter.frequency.setTargetAtTime(250 + throttle * 900, t, 0.1);
+      this.engineGain.gain.setTargetAtTime(silent ? 0 : 0.12 + throttle * 0.22, t, 0.1);
+    }
+    const w = Math.min(1, airspeed / (jet ? 160 : 70));
     this.windFilter.frequency.setTargetAtTime(300 + w * 1400, t, 0.2);
     this.windGain.gain.setTargetAtTime(silent ? 0 : w * w * 0.35, t, 0.2);
     this.hornGain.gain.setTargetAtTime(stall && !silent ? 0.05 : 0, t, 0.03);

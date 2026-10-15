@@ -5,7 +5,7 @@ export type HeightFn = (x: number, z: number) => number;
 
 type ContactKind = 'nose' | 'main' | 'skid' | 'crash';
 
-interface Contact {
+export interface Contact {
   p: Vector3; // body-frame position relative to the centre of gravity
   kind: ContactKind;
   k: number; // spring N/m
@@ -13,7 +13,7 @@ interface Contact {
   label: string;
 }
 
-const contact = (x: number, y: number, z: number, kind: ContactKind, label: string, k = 0, c = 0): Contact => ({
+export const contact = (x: number, y: number, z: number, kind: ContactKind, label: string, k = 0, c = 0): Contact => ({
   p: new Vector3(x, y, z),
   kind,
   k,
@@ -21,8 +21,8 @@ const contact = (x: number, y: number, z: number, kind: ContactKind, label: stri
   label,
 });
 
-export const CONTACTS: Contact[] = [
-  contact(0, -1.2, -1.55, 'nose', 'Bugfahrwerk', 60_000, 6_000),
+export const C172_CONTACTS: Contact[] = [
+  contact(0, -1.2, -1.55, 'nose', 'Bugfahrwerk', 120_000, 9_000),
   contact(-1.25, -1.2, 0.25, 'main', 'Hauptfahrwerk', 70_000, 6_000),
   contact(1.25, -1.2, 0.25, 'main', 'Hauptfahrwerk', 70_000, 6_000),
   contact(0, -0.35, 4.7, 'skid', 'Sporn', 30_000, 3_000),
@@ -32,6 +32,19 @@ export const CONTACTS: Contact[] = [
   contact(0, -0.75, -0.2, 'crash', 'Rumpf'),
   contact(0, -0.6, -1.8, 'crash', 'Motorhaube'),
   contact(0, 1.65, 4.9, 'crash', 'Seitenleitwerk'),
+];
+
+export const JET_CONTACTS: Contact[] = [
+  contact(0, -1.55, -3.2, 'nose', 'Bugfahrwerk', 150_000, 15_000),
+  contact(-1.3, -1.55, 0.35, 'main', 'Hauptfahrwerk', 250_000, 25_000),
+  contact(1.3, -1.55, 0.35, 'main', 'Hauptfahrwerk', 250_000, 25_000),
+  contact(0, -0.55, 4.9, 'skid', 'Heck', 120_000, 12_000),
+  contact(-4.73, -0.35, 0.3, 'crash', 'Flügelspitze'),
+  contact(4.73, -0.35, 0.3, 'crash', 'Flügelspitze'),
+  contact(0, -0.45, -5.2, 'crash', 'Bug'),
+  contact(0, -0.72, -1.2, 'crash', 'Rumpf'),
+  contact(0, -0.65, 1.8, 'crash', 'Rumpf'),
+  contact(0, 2.0, 5.2, 'crash', 'Seitenleitwerk'),
 ];
 
 /** Wheel compression beyond this breaks the gear. */
@@ -58,6 +71,9 @@ const result: GroundResult = { onGround: false, crash: null };
  * Adds world-frame force and torque (about the CG) to the accumulators.
  */
 export function computeGround(
+  contacts: Contact[],
+  /** 0 retracted … 1 down and locked */
+  gear: number,
   pos: Vector3,
   vel: Vector3,
   quat: Quaternion,
@@ -77,7 +93,10 @@ export function computeGround(
   fw.normalize();
   const groundSpeed = Math.hypot(vel.x, vel.z);
 
-  for (const ct of CONTACTS) {
+  const gearDown = gear > 0.98;
+  for (const ct of contacts) {
+    const wheel = ct.kind === 'nose' || ct.kind === 'main';
+    if (wheel && !gearDown) continue;
     r.copy(ct.p).applyQuaternion(quat);
     wp.copy(pos).add(r);
     const h = height(wp.x, wp.z);
@@ -88,7 +107,7 @@ export function computeGround(
     const d = h - wp.y;
     if (d <= 0) continue;
     if (ct.kind === 'crash') {
-      result.crash = `${ct.label} hat den Boden berührt`;
+      result.crash = gear < 0.98 ? 'Bauchlandung – Fahrwerk war nicht ausgefahren' : `${ct.label} hat den Boden berührt`;
       return result;
     }
     if (ct.kind !== 'skid' && d > MAX_COMPRESSION) {

@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { EYE } from '../cockpit/stick';
 
 export type CameraMode = 'cockpit' | 'chase';
 
@@ -15,6 +14,11 @@ const COCKPIT_PITCH = -0.2;
 export class CameraRig {
   mode: CameraMode = 'cockpit';
   readonly xrRig = new THREE.Group();
+  /** seat height offset (m) */
+  private seatOffset = 0;
+  /** pilot eye of the current aircraft, without seat offset */
+  private readonly baseEye = new THREE.Vector3(-0.3, 0.6, -0.6);
+  private readonly eye = this.baseEye.clone();
   private yaw = 0;
   private pitch = COCKPIT_PITCH;
   private readonly smoothQuat = new THREE.Quaternion();
@@ -30,7 +34,7 @@ export class CameraRig {
     dom: HTMLElement,
   ) {
     this.xrRig.name = 'xr-rig';
-    this.xrRig.position.copy(EYE);
+    this.xrRig.position.copy(this.eye);
     aircraft.add(this.xrRig);
     scene.add(camera);
 
@@ -58,6 +62,26 @@ export class CameraRig {
     this.pitch = this.mode === 'cockpit' ? COCKPIT_PITCH : 0;
   }
 
+  /** Switches to another aircraft's eye point. */
+  setEye(eye: THREE.Vector3): void {
+    this.baseEye.copy(eye);
+    this.eye.copy(eye).setY(eye.y + this.seatOffset);
+    if (this.camera.parent === this.xrRig) this.recenter();
+    else this.xrRig.position.copy(this.eye);
+  }
+
+  set seat(offset: number) {
+    const dy = offset - this.seatOffset;
+    this.seatOffset = offset;
+    this.eye.copy(this.baseEye).setY(this.baseEye.y + offset);
+    // in VR move the rig directly so the change is felt immediately
+    if (this.camera.parent === this.xrRig) this.xrRig.position.y += dy;
+  }
+
+  get seat(): number {
+    return this.seatOffset;
+  }
+
   get inCockpit(): boolean {
     return this.mode === 'cockpit' || this.camera.parent === this.xrRig;
   }
@@ -71,7 +95,7 @@ export class CameraRig {
 
   onXREnd(): void {
     this.scene.add(this.camera);
-    this.xrRig.position.copy(EYE);
+    this.xrRig.position.copy(this.eye);
     this.xrRig.rotation.set(0, 0, 0);
   }
 
@@ -82,7 +106,7 @@ export class CameraRig {
     const headYaw = this.euler.y;
     this.xrRig.rotation.set(0, -headYaw, 0);
     this.v.copy(this.camera.position).applyAxisAngle(Y, -headYaw);
-    this.xrRig.position.copy(EYE).sub(this.v);
+    this.xrRig.position.copy(this.eye).sub(this.v);
   }
 
   update(dt: number): void {
@@ -97,7 +121,7 @@ export class CameraRig {
     this.euler.set(this.pitch, this.yaw, 0, 'YXZ');
     this.look.setFromEuler(this.euler);
     if (this.mode === 'cockpit') {
-      this.camera.position.copy(EYE).applyQuaternion(ac.quaternion).add(ac.position);
+      this.camera.position.copy(this.eye).applyQuaternion(ac.quaternion).add(ac.position);
       this.camera.quaternion.copy(ac.quaternion).multiply(this.look);
       this.smoothQuat.copy(ac.quaternion);
     } else {

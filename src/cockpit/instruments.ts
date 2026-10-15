@@ -15,6 +15,20 @@ export interface InstrumentData {
   brake: number;
   stall: boolean;
   onGround: boolean;
+  fps: number;
+  trimRoll: number;
+  trimYaw: number;
+  /** landing gear position 0…1, or null for fixed gear */
+  gear: number | null;
+}
+
+export interface InstrumentConfig {
+  maxKt: number;
+  greenArc: [number, number];
+  yellowArc: [number, number];
+  flapArc: [number, number];
+  engine: 'rpm' | 'n1';
+  flapDegrees: number;
 }
 
 const W = 1536;
@@ -30,7 +44,10 @@ export class Instruments {
   private readonly texture: THREE.CanvasTexture;
   private timer = 0;
 
-  constructor(width: number) {
+  constructor(
+    width: number,
+    private readonly cfg: InstrumentConfig,
+  ) {
     const canvas = document.createElement('canvas');
     canvas.width = W;
     canvas.height = H;
@@ -147,14 +164,19 @@ export class Instruments {
 
   private airspeed(x: number, y: number, kt: number): void {
     this.bezel(x, y);
+    const max = this.cfg.maxKt;
+    const [g0, g1] = this.cfg.greenArc;
+    const [y0, y1] = this.cfg.yellowArc;
+    const [f0, f1] = this.cfg.flapArc;
     const a0 = -Math.PI / 2 + 10 * DEG;
-    const ang = (v: number) => a0 + (Math.min(v, 180) / 180) * 340 * DEG;
-    this.arc(x, y, ang(40), ang(85), '#e8e8e8', R - 16, 6);
-    this.arc(x, y, ang(48), ang(129), '#2fb34a');
-    this.arc(x, y, ang(129), ang(163), '#e8c22c');
-    this.arc(x, y, ang(163), ang(166), '#e23b2b', R - 6, 9);
-    this.ticks(x, y, ang(0), ang(180), 36, 4);
-    for (let v = 40; v <= 160; v += 40) {
+    const ang = (v: number) => a0 + (Math.min(v, max) / max) * 340 * DEG;
+    this.arc(x, y, ang(f0), ang(f1), '#e8e8e8', R - 16, 6);
+    this.arc(x, y, ang(g0), ang(g1), '#2fb34a');
+    this.arc(x, y, ang(y0), ang(y1), '#e8c22c');
+    this.arc(x, y, ang(y1), ang(y1 + max * 0.017), '#e23b2b', R - 6, 9);
+    const step = max > 200 ? 50 : 20;
+    this.ticks(x, y, ang(0), ang(max), max / (step / 2), 2);
+    for (let v = step * 2; v < max; v += step * 2) {
       const a = ang(v);
       this.label(String(v), x + Math.cos(a) * (R - 40), y + Math.sin(a) * (R - 40), 20);
     }
@@ -241,6 +263,7 @@ export class Instruments {
   }
 
   private tachometer(x: number, y: number, rpm: number): void {
+    if (this.cfg.engine === 'n1') return this.n1Gauge(x, y, rpm);
     this.bezel(x, y);
     const a0 = 0.75 * Math.PI;
     const ang = (v: number) => a0 + (Math.min(v, 3000) / 3000) * 1.5 * Math.PI;
@@ -254,6 +277,22 @@ export class Instruments {
     this.label('RPM ×100', x, y - 30, 14, '#bbb');
     this.digits(String(Math.round(rpm / 10) * 10), x, y + 50, 86);
     this.needle(x, y, ang(rpm), R - 12);
+  }
+
+  private n1Gauge(x: number, y: number, n1: number): void {
+    this.bezel(x, y);
+    const a0 = 0.75 * Math.PI;
+    const ang = (v: number) => a0 + (Math.min(v, 110) / 110) * 1.5 * Math.PI;
+    this.arc(x, y, ang(55), ang(103), '#2fb34a');
+    this.arc(x, y, ang(103), ang(106), '#e23b2b', R - 6, 9);
+    this.ticks(x, y, ang(0), ang(110), 22, 2);
+    for (let v = 0; v <= 100; v += 20) {
+      const a = ang(v);
+      this.label(String(v), x + Math.cos(a) * (R - 36), y + Math.sin(a) * (R - 36), 20);
+    }
+    this.label('N1 %', x, y - 30, 14, '#bbb');
+    this.digits(n1.toFixed(1), x, y + 50, 86);
+    this.needle(x, y, ang(n1), R - 12);
   }
 
   private heading(x: number, y: number, hdg: number): void {
@@ -330,18 +369,21 @@ export class Instruments {
       this.label(text, x + 80, y0 + 88, 22);
     };
     bar(30, 'GAS', d.throttle, `${Math.round(d.throttle * 100)} %`, '#2fb34a');
-    bar(230, 'KLAPPEN', d.flaps, `${Math.round(d.flaps * 30)}° → ${Math.round(d.flapsTarget * 30)}°`, '#e8e8e8');
+    const fd = this.cfg.flapDegrees;
+    bar(230, 'KLAPPEN', d.flaps, `${Math.round(d.flaps * fd)}° → ${Math.round(d.flapsTarget * fd)}°`, '#e8e8e8');
 
-    // trim: centred indicator
+    // trims: three centred indicators (pitch, roll, yaw)
     const tx = 430;
-    this.label('TRIMM', tx + 80, y0 + 18, 18, '#bbb');
-    ctx.fillStyle = '#000';
-    ctx.fillRect(tx, y0 + 36, 160, 26);
-    ctx.fillStyle = '#555';
-    ctx.fillRect(tx + 79, y0 + 36, 2, 26);
-    ctx.fillStyle = '#ffb21a';
-    ctx.fillRect(tx + 74 + d.trim * 74, y0 + 38, 12, 22);
-    this.label(d.trim > 0.02 ? 'NOSE UP' : d.trim < -0.02 ? 'NOSE DN' : 'NEUTRAL', tx + 80, y0 + 88, 20);
+    this.label('TRIMM H · Q · S', tx + 105, y0 + 18, 18, '#bbb');
+    [d.trim, d.trimRoll, d.trimYaw].forEach((t, i) => {
+      const ry = y0 + 34 + i * 24;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(tx, ry, 210, 18);
+      ctx.fillStyle = '#555';
+      ctx.fillRect(tx + 104, ry, 2, 18);
+      ctx.fillStyle = '#ffb21a';
+      ctx.fillRect(tx + 99 + t * 99, ry + 2, 12, 14);
+    });
 
     const lamp = (x: number, text: string, on: boolean, color: string) => {
       ctx.fillStyle = on ? color : '#2c2d30';
@@ -351,9 +393,10 @@ export class Instruments {
       ctx.strokeRect(x, y0 + 30, 200, 70);
       this.label(text, x + 100, y0 + 66, 28, on ? '#000' : '#666');
     };
-    lamp(660, 'STALL', d.stall, '#ff3b2b');
-    lamp(880, 'BRAKE', d.brake > 0.05, '#ffb21a');
-    lamp(1100, 'GROUND', d.onGround, '#56c271');
-    this.label('planr C-172', 1420, y0 + 66, 22, '#777');
+    lamp(670, 'STALL', d.stall, '#ff3b2b');
+    lamp(885, 'BRAKE', d.brake > 0.05, '#ffb21a');
+    if (d.gear === null) lamp(1100, 'GROUND', d.onGround, '#56c271');
+    else lamp(1100, d.gear > 0.98 ? 'GEAR ▼' : d.gear > 0.02 ? 'GEAR ⇅' : 'GEAR ▲', d.gear > 0.02, d.gear > 0.98 ? '#56c271' : '#ff3b2b');
+    this.label(`${Math.round(d.fps)} fps`, 1420, y0 + 66, 24, d.fps < 68 ? '#ff7a5a' : '#777');
   }
 }

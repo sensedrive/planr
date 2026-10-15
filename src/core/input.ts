@@ -14,6 +14,12 @@ export interface ControlState {
   flaps: number;
   /** pitch trim -1 (nose down) … +1 (nose up) */
   trim: number;
+  /** aileron trim -1 (left) … +1 (right) */
+  trimRoll: number;
+  /** rudder trim -1 (left) … +1 (right) */
+  trimYaw: number;
+  /** landing gear lever: 1 down, 0 up */
+  gear: number;
 }
 
 export const FLAP_STEPS = 3;
@@ -25,10 +31,13 @@ export interface Actions {
   togglePause(): void;
   toggleMute(): void;
   toggleHelp(): void;
+  toggleMenu(): void;
+  /** changes the seat height by `delta` metres */
+  adjustSeat(delta: number): void;
 }
 
 export function createControlState(): ControlState {
-  return { pitch: 0, roll: 0, yaw: 0, throttle: 0, brake: 0, flaps: 0, trim: 0 };
+  return { pitch: 0, roll: 0, yaw: 0, throttle: 0, brake: 0, flaps: 0, trim: 0, trimRoll: 0, trimYaw: 0, gear: 1 };
 }
 
 export function clamp(v: number, min = -1, max = 1): number {

@@ -1,25 +1,13 @@
 #!/usr/bin/env bash
-# Deploys the current main branch from GitHub to the shared Docker host.
+# Manual deploy from your machine: installs/updates the host-side deploy script, then runs it.
+# CI does the same on every push to main (see .github/workflows/ci.yml).
 set -euo pipefail
 
 HOST="${DEPLOY_HOST:-ubuntu@46.224.167.199}"
-REPO="https://github.com/sensedrive/planr.git"
+DIR="$(cd "$(dirname "$0")" && pwd)"
 
-ssh "$HOST" bash -s <<EOF
-set -euo pipefail
-if [ -d /opt/planr/app/.git ]; then
-  git -C /opt/planr/app fetch --quiet origin main
-  git -C /opt/planr/app reset --quiet --hard origin/main
-else
-  sudo mkdir -p /opt/planr && sudo chown "\$USER" /opt/planr
-  git clone --quiet "$REPO" /opt/planr/app
-fi
-cd /opt/planr/app
-docker compose -f deploy/compose.yml up -d --build
-cp deploy/planr.caddy /opt/beeryouup/caddy-sites/planr.caddy
-docker exec beeryouup-caddy-1 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
-docker exec beeryouup-caddy-1 caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
-echo "deployed \$(git rev-parse --short HEAD)"
-EOF
+ssh "$HOST" 'sudo mkdir -p /opt/planr && sudo chown "$USER" /opt/planr'
+scp -q "$DIR/remote-deploy.sh" "$HOST:/opt/planr/deploy.sh"
+ssh "$HOST" 'chmod 755 /opt/planr/deploy.sh && /opt/planr/deploy.sh'
 
 echo "→ https://planr.46-224-167-199.nip.io"

@@ -25,6 +25,32 @@
       }
       #message small { display: block; font-size: 14px; opacity: 0.8; margin-top: 6px; }
       body.xr #hud, body.xr #help, body.xr #message { display: none !important; }
+      #menu {
+        position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px;
+        background: rgba(8, 12, 18, 0.45); backdrop-filter: blur(3px); z-index: 10; overflow: auto;
+      }
+      body.xr #menu { display: none !important; }
+      #menu .card {
+        width: min(760px, 100%); background: rgba(14, 19, 26, 0.94); color: #e8eef4; border-radius: 16px;
+        padding: 22px 26px; box-shadow: 0 20px 60px rgba(0,0,0,0.4); box-sizing: border-box;
+      }
+      #menu h1 { margin: 0; font-size: 34px; letter-spacing: 0.5px; }
+      #menu .sub { margin: 2px 0 14px; color: #9aa7b5; font-size: 14px; }
+      #menu .row { display: flex; align-items: center; gap: 12px; padding: 6px 0; flex-wrap: wrap; }
+      #menu .label { width: 150px; color: #cfd8e0; font-size: 14px; }
+      #menu .choices { display: flex; gap: 6px; flex: 1; flex-wrap: wrap; }
+      #menu button {
+        flex: 1; min-width: 70px; padding: 9px 10px; border: 0; border-radius: 9px; cursor: pointer;
+        background: #252b33; color: #fff; font: 14px ui-sans-serif, system-ui, sans-serif;
+      }
+      #menu button:hover { background: #3a4452; }
+      #menu button.active { background: #3d8bfd; }
+      #menu .footer { display: flex; gap: 10px; margin-top: 14px; }
+      #menu .footer button { padding: 14px; font-size: 17px; }
+      #menu .footer button.primary { background: #ff9a2a; color: #1a1206; font-weight: 700; flex: 2; }
+      #menu .best { color: #9aa7b5; font-size: 13px; min-height: 1em; margin: 10px 0 0; }
+      #menu .hint { color: #6f7c8a; font-size: 12px; margin: 10px 0 0; }
+      #VRButton { z-index: 20 !important; }
     </style>
   </head>
   <body>
@@ -32,8 +58,9 @@
     <div id="help">
       <b>Steuerung</b><br />
       <kbd>W</kbd>/<kbd>S</kbd> drücken/ziehen · <kbd>A</kbd>/<kbd>D</kbd> rollen · <kbd>Q</kbd>/<kbd>E</kbd> Seitenruder<br />
-      <kbd>Shift</kbd>/<kbd>X</kbd> oder Mausrad Gas · <kbd>B</kbd> Bremse · <kbd>F</kbd>/<kbd>V</kbd> Klappen · <kbd>T</kbd>/<kbd>G</kbd> Trimmung<br />
-      <kbd>C</kbd> Kamera · Maus ziehen umsehen · <kbd>R</kbd> Neustart · <kbd>L</kbd> Luftstart · <kbd>P</kbd> Pause · <kbd>M</kbd> Ton · <kbd>H</kbd> Hilfe
+      <kbd>Shift</kbd>/<kbd>X</kbd> oder Mausrad Gas · <kbd>B</kbd> Bremse · <kbd>F</kbd>/<kbd>V</kbd> Klappen · <kbd>G</kbd> Fahrwerk · <kbd>,</kbd>/<kbd>.</kbd> Trimmung<br />
+      Cockpit: Hebel, Trimmräder anklicken (links +, rechts −)<br />
+      <kbd>C</kbd> Kamera · Maus ziehen umsehen · <kbd>R</kbd> Neustart · <kbd>L</kbd> Luftstart · <kbd>P</kbd> Pause · <kbd>M</kbd> Ton · <kbd>H</kbd> Hilfe · <kbd>Esc</kbd> Menü
     </div>
     <div id="message"></div>
     <script type="module" src="/src/main.ts"></script>

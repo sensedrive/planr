@@ -35,6 +35,8 @@ export class GamepadInput {
     if (pressed[13]) c.trim = clamp(c.trim + 0.35 * dt);
     if (edge(3)) this.actions.toggleCamera();
     if (edge(9)) this.actions.reset(false);
+    if (edge(8)) this.actions.toggleMenu();
+    if (edge(1)) c.gear = c.gear >= 0.5 ? 0 : 1;
     this.prev = pressed;
 
     this.axes.roll = deadzone(gp.axes[0] ?? 0, 0.08);
