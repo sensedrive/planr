@@ -57,6 +57,8 @@ export class Aircraft {
   airTime = 0;
   crashed = false;
   crashReason = '';
+  /** the "crash" was a successful ditching on water */
+  ditched = false;
   /** set on the step the wheels first touch after flight; consumers clear it */
   touchdown: Touchdown | null = null;
 
@@ -84,6 +86,7 @@ export class Aircraft {
     this.flaps = spot.flaps ?? 0;
     this.crashed = false;
     this.crashReason = '';
+    this.ditched = false;
     this.touchdown = null;
     const speed = spot.speed ?? 0;
     this.onGround = speed === 0;
@@ -130,6 +133,7 @@ export class Aircraft {
     if (ground.crash) {
       this.crashed = true;
       this.crashReason = ground.crash;
+      if (ground.water) this.rateDitching();
       this.vel.set(0, 0, 0);
       this.omega.set(0, 0, 0);
       return;
@@ -183,6 +187,20 @@ export class Aircraft {
       this.dq.setFromAxisAngle(this.tmp, angle);
       this.quat.multiply(this.dq).normalize();
     }
+  }
+
+  /** A gentle, wings-level, slightly nose-up touchdown on water counts as a successful ditching. */
+  private rateDitching(): void {
+    const sink = -this.verticalSpeedFpm;
+    const limitKt = this.type.id === 'jet' ? 150 : 75;
+    const problems: string[] = [];
+    if (sink > 500) problems.push(`zu hohe Sinkrate (${Math.round(sink)} ft/min)`);
+    if (this.airspeedKt > limitKt) problems.push(`zu schnell (${Math.round(this.airspeedKt)} kn)`);
+    if (Math.abs(this.rollDeg) > 12) problems.push('Fläche zuerst eingetaucht');
+    if (this.pitchDeg < -4) problems.push('Nase zuerst eingetaucht');
+    if (this.type.retractableGear && this.gear > 0.5) problems.push('Fahrwerk ausgefahren');
+    this.ditched = problems.length === 0;
+    this.crashReason = this.ditched ? 'Notwasserung gelungen – alle an Bord gerettet' : `Wasserung misslungen: ${problems.join(', ')}`;
   }
 
   /** Writes a render pose interpolated between the last two physics states. */

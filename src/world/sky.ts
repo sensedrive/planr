@@ -117,6 +117,7 @@ export class Environment {
   private readonly base: THREE.Vector3[] = [];
   private readonly scale: number[] = [];
   private cloudTimer = 0;
+  private cloudBase = 1100;
 
   constructor(private readonly scene: THREE.Scene) {
     this.uniforms = {
@@ -150,7 +151,7 @@ export class Environment {
     for (let c = 0; c < clusters; c++) {
       const cx = (rand() - 0.5) * CLOUD_BOX;
       const cz = (rand() - 0.5) * CLOUD_BOX;
-      const cy = 1100 + rand() * 500;
+      const cy = rand() * 500; // offset above the cloud base
       for (let i = 0; i < puffs; i++) {
         this.base.push(new THREE.Vector3(cx + (rand() - 0.5) * 300, cy + rand() * 60, cz + (rand() - 0.5) * 200));
         this.scale.push(70 + rand() * 90);
@@ -176,10 +177,17 @@ export class Environment {
     this.hemi.groundColor.set(l.hemiGround);
     this.hemi.intensity = l.hemiIntensity;
     const fog = this.scene.fog as THREE.Fog;
+    // THREE.Fog copies its colour, so it has to follow the horizon explicitly
+    fog.color.copy(this.horizon);
     fog.near = l.fogNear;
     fog.far = l.fogFar;
     this.cloudMat.emissive.set(l.cloud);
     this.cloudMat.color.set(l.cloudColor);
+  }
+
+  setCloudBase(altitude: number): void {
+    this.cloudBase = altitude;
+    this.cloudTimer = 0;
   }
 
   update(dt: number, pos: THREE.Vector3): void {
@@ -198,7 +206,7 @@ export class Environment {
     const s = new THREE.Vector3();
     for (let i = 0; i < this.base.length; i++) {
       const b = this.base[i];
-      p.set(b.x + CLOUD_BOX * Math.round((x - b.x) / CLOUD_BOX), b.y, b.z + CLOUD_BOX * Math.round((z - b.z) / CLOUD_BOX));
+      p.set(b.x + CLOUD_BOX * Math.round((x - b.x) / CLOUD_BOX), this.cloudBase + b.y, b.z + CLOUD_BOX * Math.round((z - b.z) / CLOUD_BOX));
       const sc = this.scale[i];
       s.set(sc, sc * 0.6, sc);
       m.compose(p, q, s);

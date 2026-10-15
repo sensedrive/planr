@@ -1,0 +1,25 @@
+{
+  "origin": {
+    "lat": 40.758,
+    "lon": -73.9855
+  },
+  "metersPerDegree": {
+    "lat": 110574,
+    "lon": 84321.98726149889
+  },
+  "grid": {
+    "nx": 1181,
+    "nz": 1106,
+    "x0": -6281.988050981705,
+    "z0": -7961.327999999516,
+    "cell": 15,
+    "heightScale": 0.1
+  },
+  "cover": {
+    "urban": 0,
+    "park": 1,
+    "water": 2
+  },
+  "attribution": "Gebäude & Parks: NYC Open Data · Wasser: US Census TIGER/Line · Gelände: Mapzen Terrain Tiles",
+  "built": "2026-10-15T15:12:55.189Z"
+}

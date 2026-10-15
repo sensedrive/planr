@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { type Airport, AIRPORTS, HOME, runwayLocal, runwayPoint } from './airports';
+import { type Airport, runwayLocal, runwayPoint } from './airports';
+import type { Scenario } from './scenario';
 import { mulberry32, terrainHeight } from './terrain';
 
 const DEG = Math.PI / 180;
@@ -249,7 +250,10 @@ export class Airfield {
   }
 }
 
-export function createTrees(): THREE.InstancedMesh {
+export function createTrees(sc: Scenario): THREE.InstancedMesh | null {
+  const area = sc.trees;
+  if (!area) return null;
+  const home = sc.airports[0];
   const rand = mulberry32(99);
   const geo = new THREE.ConeGeometry(3.5, 12, 6).translate(0, 6, 0);
   const mat = new THREE.MeshLambertMaterial({ flatShading: true });
@@ -262,19 +266,22 @@ export function createTrees(): THREE.InstancedMesh {
   const c = new THREE.Color();
   let n = 0;
   for (let tries = 0; tries < max * 4 && n < max; tries++) {
-    const x = (rand() - 0.5) * 7000;
-    const z = (rand() - 0.5) * 7000;
-    const local = runwayLocal(HOME, x, z);
+    const x = area.center.x + (rand() - 0.5) * 2 * area.radius;
+    const z = area.center.z + (rand() - 0.5) * 2 * area.radius;
+    const local = runwayLocal(home, x, z);
     if (Math.abs(local.lateral) < 140 && Math.abs(local.along) < 900) continue; // runway clearance
     if (local.lateral > 30 && local.lateral < 260 && local.along > -400 && local.along < -120) continue; // apron & hangars
+    if (sc.airports.some((a) => {
+      const p = runwayLocal(a, x, z);
+      return Math.abs(p.lateral) < a.width / 2 + 80 && Math.abs(p.along) < a.length / 2 + 300;
+    })) continue;
     const h = terrainHeight(x, z);
-    if (h < 4 || h > 320) continue;
     const slope = Math.abs(terrainHeight(x + 8, z) - h) + Math.abs(terrainHeight(x, z + 8) - h);
-    if (slope > 6) continue;
+    if (!area.ok(x, z, h, slope)) continue;
     if (Math.sin(x * 0.004) * Math.cos(z * 0.0035) < -0.1 && rand() < 0.8) continue;
-    const sc = 0.6 + rand() * 0.9;
+    const size = 0.6 + rand() * 0.9;
     p.set(x, h - 0.5, z);
-    s.set(sc, sc * (0.8 + rand() * 0.5), sc);
+    s.set(size, size * (0.8 + rand() * 0.5), size);
     m.compose(p, q, s);
     mesh.setMatrixAt(n, m);
     c.setHSL(0.27 + rand() * 0.06, 0.45, 0.18 + rand() * 0.1);
@@ -286,6 +293,6 @@ export function createTrees(): THREE.InstancedMesh {
   return mesh;
 }
 
-export function createAirfields(maxAnisotropy: number): Airfield[] {
-  return AIRPORTS.map((a) => new Airfield(a, maxAnisotropy));
+export function createAirfields(airports: Airport[], maxAnisotropy: number): Airfield[] {
+  return airports.map((a) => new Airfield(a, maxAnisotropy));
 }

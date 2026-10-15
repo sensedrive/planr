@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { type ControlState, createControlState } from '../core/input';
 import type { Aircraft, StartSpot } from '../sim/aircraft';
 import { AIRCRAFT } from '../sim/types';
-import { HOME, MOUNTAIN, runwayPoint } from '../world/airports';
+import { runwayPoint } from '../world/airports';
+import { home, scenario } from '../world/scenario';
 import { surfaceHeight } from '../world/terrain';
 import { rateLanding } from './landing';
 import { RingCourse } from './rings';
@@ -56,6 +57,7 @@ export class Missions {
   private spotFor(id: MissionId): StartSpot {
     const t = this.aircraft.type;
     const jet = t.id === 'jet';
+    const HOME = home();
     const runwayStart = (): StartSpot => ({
       position: runwayPoint(HOME, -HOME.length / 2 + (jet ? 60 : 40), 0, t.restHeight),
       heading: HOME.heading,
@@ -81,16 +83,21 @@ export class Missions {
       }
       case 'rings':
         return { position: this.course.start.clone(), heading: this.course.heading, speed: jet ? 90 : 48, spool: 0.7 };
+      case 'ditching': {
+        const d = scenario().ditchingStart!;
+        return { position: d.position.clone().setY(d.position.y + (jet ? 300 : 0)), heading: d.heading, speed: t.cruise * 0.85, spool: 0 };
+      }
       default:
         return runwayStart();
     }
   }
 
   start(settings: Settings, c: ControlState): void {
-    this.mission = settings.mission;
+    const sc = scenario();
+    this.mission = sc.missions.includes(settings.mission) ? settings.mission : 'free';
     const a = this.aircraft;
     a.setType(AIRCRAFT[settings.aircraft]);
-    const spot = this.spotFor(settings.mission);
+    const spot = this.spotFor(this.mission);
     a.realistic = settings.realism === 'real';
     a.reset(spot);
     Object.assign(c, createControlState());
@@ -102,9 +109,13 @@ export class Missions {
       c.trim = 0.25;
     }
     // airborne starts: gear down only on final approach
-    if (a.type.retractableGear && spot.speed && settings.mission !== 'landing') c.gear = 0;
+    if (a.type.retractableGear && spot.speed && this.mission !== 'landing') c.gear = 0;
     a.gear = c.gear;
-    this.weather.configure(settings.wind, HOME.heading);
+    if (this.mission === 'ditching') {
+      a.engine.failed = true;
+      c.throttle = 0;
+    }
+    this.weather.configure(settings.wind, home().heading);
     this.time = 0;
     this.finished = false;
     this.notice = null;
@@ -115,23 +126,34 @@ export class Missions {
     this.failAgl = settings.failure === 'takeoff' && !spot.speed ? 80 + Math.random() * 70 : Infinity;
 
     this.course.reset();
-    this.course.group.visible = settings.mission === 'rings';
-    switch (settings.mission) {
+    this.course.group.visible = this.mission === 'rings';
+    switch (this.mission) {
       case 'landing':
-        this.notify('Landeanflug Piste ' + HOME.labelA, 'PAPI: 2 weiß + 2 rot = richtiger Gleitpfad', 7);
+        this.notify(`Landeanflug ${home().name} ${home().labelA}`, 'PAPI: 2 weiß + 2 rot = richtiger Gleitpfad', 7);
         break;
       case 'rings':
         this.notify('Ringparcours', `${this.course.rings.length} Ringe – flieg durch den orangen`, 6);
         break;
       case 'crosscountry':
-        this.notify('Streckenflug', `Lande auf dem ${MOUNTAIN.name} (Pfeil auf dem Panel)`, 7);
+        this.notify('Streckenflug', `Lande auf dem ${sc.destination?.name} (Pfeil auf dem Panel)`, 7);
+        break;
+      case 'ditching':
+        this.notify('Motorausfall über Manhattan!', 'Gleite zum Hudson und wassere: Flächen waagerecht, Nase leicht hoch, langsam', 9);
         break;
     }
   }
 
   update(dt: number): void {
     const a = this.aircraft;
+    const sc = scenario();
     if (this.notice && performance.now() > this.notice.until) this.notice = null;
+    if (a.ditched && !this.finished) {
+      this.finished = true;
+      if (this.mission === 'ditching') {
+        const best = loadBest('ditching');
+        if (best === null || this.time < best) saveBest('ditching', this.time);
+      }
+    }
     if (a.crashed) {
       this.status = '';
       return;
@@ -160,7 +182,7 @@ export class Missions {
         const best = loadBest('landing');
         if (best === null || r.stars > best) saveBest('landing', r.stars);
       }
-      if (this.mission === 'crosscountry' && !this.finished && r.airport === MOUNTAIN && r.stars > 0) {
+      if (this.mission === 'crosscountry' && !this.finished && r.airport === sc.destination && r.stars > 0) {
         this.finished = true;
         const best = loadBest('crosscountry');
         const record = best === null || this.time < best;
@@ -171,6 +193,7 @@ export class Missions {
 
     switch (this.mission) {
       case 'landing': {
+        const HOME = home();
         const aim = runwayPoint(HOME, -HOME.length / 2 + 300, 0);
         this.target = this.finished ? null : aim;
         const d = Math.hypot(a.pos.x - aim.x, a.pos.z - aim.z);
@@ -197,14 +220,19 @@ export class Missions {
         break;
       }
       case 'crosscountry': {
-        const t = MOUNTAIN.center;
+        const dest = sc.destination!;
+        const t = dest.center;
         this.target = this.finished ? null : t;
         const d = Math.hypot(a.pos.x - t.x, a.pos.z - t.z);
         this.status = this.finished
           ? `Gelandet · ${clock(this.time)}`
-          : `${MOUNTAIN.name} ${MOUNTAIN.labelA}/${MOUNTAIN.labelB} · ${distance(d)} · Platzhöhe ${Math.round(t.y * M_TO_FT)} ft · ${clock(this.time)}`;
+          : `${dest.name} ${dest.labelA}/${dest.labelB} · ${distance(d)} · Platzhöhe ${Math.round(t.y * M_TO_FT)} ft · ${clock(this.time)}`;
         break;
       }
+      case 'ditching':
+        this.target = null;
+        this.status = `Motor aus · ${Math.round(a.airspeedKt)} kn · ${Math.round(Math.max(0, agl) * M_TO_FT)} ft über Grund`;
+        break;
       default:
         this.target = null;
         this.status = '';

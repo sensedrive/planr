@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { AIRPORTS, runwayLocal } from './airports';
-import { noiseC, noiseD, rawHeight } from './noise';
+import { runwayLocal } from './airports';
+import { scenario } from './scenario';
 
 export { mulberry32 } from './noise';
 
@@ -9,15 +9,19 @@ const CHUNK_SIZE = 1500;
 const FINE_SEGS = 64;
 const FINE_STEP = CHUNK_SIZE / FINE_SEGS;
 
-/** Analytic ground height in metres; negative values are under water (sea level = 0). */
+/** Analytic ground height in metres for the active scenario; negative values are under water (sea level = 0). */
 export function terrainHeight(x: number, z: number): number {
-  let h = rawHeight(x, z);
+  const s = scenario();
+  let h = s.rawHeight(x, z);
   // flatten the airfields
-  for (const a of AIRPORTS) {
+  for (const a of s.airports) {
     const p = runwayLocal(a, x, z);
-    const dl = Math.max(0, Math.abs(p.lateral) - (a.width / 2 + 150));
-    const da = Math.max(0, Math.abs(p.along) - (a.length / 2 + 300));
-    const t = THREE.MathUtils.smoothstep(Math.hypot(dl, da), 0, 1000);
+    const f = a.flatten;
+    const dl = Math.max(0, Math.abs(p.lateral) - (a.width / 2 + f.lateral));
+    const da = Math.max(0, Math.abs(p.along) - (a.length / 2 + f.along));
+    const d = Math.hypot(dl, da);
+    if (d >= f.blend) continue;
+    const t = THREE.MathUtils.smoothstep(d, 0, f.blend);
     h = a.center.y + (h - a.center.y) * t;
   }
   // steeper underwater slopes keep shorelines crisp
@@ -26,8 +30,8 @@ export function terrainHeight(x: number, z: number): number {
 }
 
 /**
- * Height of the rendered (finest LOD) triangle mesh, so wheels touch what you see.
- * Same grid and diagonal as buildChunkGeometry.
+ * Solid surface for physics: the rendered (finest LOD) terrain triangles – same grid and diagonal as
+ * buildChunkGeometry – plus obstacles such as building roofs.
  */
 export function surfaceHeight(x: number, z: number): number {
   const gx = x / FINE_STEP;
@@ -40,33 +44,19 @@ export function surfaceHeight(x: number, z: number): number {
   const z0 = j * FINE_STEP;
   const hb = terrainHeight(x0 + FINE_STEP, z0);
   const hc = terrainHeight(x0, z0 + FINE_STEP);
+  let h: number;
   if (fx + fz <= 1) {
     const ha = terrainHeight(x0, z0);
-    return ha + (hb - ha) * fx + (hc - ha) * fz;
+    h = ha + (hb - ha) * fx + (hc - ha) * fz;
+  } else {
+    const hd = terrainHeight(x0 + FINE_STEP, z0 + FINE_STEP);
+    h = hd + (hc - hd) * (1 - fx) + (hb - hd) * (1 - fz);
   }
-  const hd = terrainHeight(x0 + FINE_STEP, z0 + FINE_STEP);
-  return hd + (hc - hd) * (1 - fx) + (hb - hd) * (1 - fz);
+  const obstacle = scenario().obstacleHeight;
+  return obstacle ? Math.max(h, obstacle(x, z)) : h;
 }
 
-const C_SAND = new THREE.Color(0xc9b98a);
-const C_GRASS = new THREE.Color(0x5d8a3a);
-const C_GRASS2 = new THREE.Color(0x7c9a45);
-const C_FOREST = new THREE.Color(0x355e2b);
-const C_ROCK = new THREE.Color(0x7a746b);
-const C_SNOW = new THREE.Color(0xf2f4f6);
 const tmpC = new THREE.Color();
-
-function terrainColor(x: number, z: number, h: number, ny: number, out: THREE.Color): THREE.Color {
-  const field = noiseD(x * 0.004, z * 0.004);
-  out.copy(C_GRASS).lerp(C_GRASS2, field * 0.5 + 0.5);
-  out.lerp(C_FOREST, THREE.MathUtils.smoothstep(h + field * 40, 140, 260));
-  out.lerp(C_ROCK, THREE.MathUtils.smoothstep(h, 420, 560));
-  out.lerp(C_ROCK, THREE.MathUtils.smoothstep(1 - ny, 0.25, 0.45));
-  out.lerp(C_SNOW, THREE.MathUtils.smoothstep(h + field * 60, 760, 860) * THREE.MathUtils.smoothstep(ny, 0.7, 0.85));
-  out.lerp(C_SAND, 1 - THREE.MathUtils.smoothstep(h, 1, 4));
-  const shade = 0.92 + noiseC(x * 0.02, z * 0.02) * 0.08;
-  return out.multiplyScalar(shade);
-}
 
 /** Builds one terrain chunk with a downward skirt that hides LOD cracks. */
 function buildChunkGeometry(x0: number, z0: number, size: number, segs: number): THREE.BufferGeometry {
@@ -98,7 +88,7 @@ function buildChunkGeometry(x0: number, z0: number, size: number, segs: number):
       nor[k * 3] = normal.x;
       nor[k * 3 + 1] = normal.y;
       nor[k * 3 + 2] = normal.z;
-      terrainColor(x0 + i * step, z0 + j * step, h, normal.y, tmpC);
+      scenario().color(x0 + i * step, z0 + j * step, h, normal.y, tmpC);
       col[k * 3] = tmpC.r;
       col[k * 3 + 1] = tmpC.g;
       col[k * 3 + 2] = tmpC.b;
@@ -180,6 +170,17 @@ export class Terrain {
     this.group.name = 'terrain';
   }
 
+  /** Drops all chunks, e.g. after switching the scenario. */
+  reset(): void {
+    for (const c of this.chunks.values()) {
+      this.group.remove(c.mesh);
+      c.mesh.geometry.dispose();
+    }
+    this.chunks.clear();
+    this.queue = [];
+    this.centerKey = '';
+  }
+
   /** Call every frame; builds chunks within a small time budget. */
   update(x: number, z: number, budgetMs = 4): void {
     const ccx = Math.floor(x / CHUNK_SIZE);
@@ -238,7 +239,7 @@ export class Terrain {
 }
 
 /** Sea plane that follows the aircraft. */
-export function createWater(): THREE.Mesh {
+export function createWater(): THREE.Mesh<THREE.PlaneGeometry, THREE.MeshLambertMaterial> {
   const geo = new THREE.PlaneGeometry(16000, 16000);
   geo.rotateX(-Math.PI / 2);
   const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: 0x2f6f8f }));

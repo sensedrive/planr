@@ -53,6 +53,8 @@ const MAX_COMPRESSION = 0.4;
 export interface GroundResult {
   onGround: boolean;
   crash: string | null;
+  /** the crash happened on water */
+  water: boolean;
 }
 
 const UP = new Vector3(0, 1, 0);
@@ -64,7 +66,7 @@ const r = new Vector3();
 const wp = new Vector3();
 const vP = new Vector3();
 const F = new Vector3();
-const result: GroundResult = { onGround: false, crash: null };
+const result: GroundResult = { onGround: false, crash: null, water: false };
 
 /**
  * Spring-damper landing gear with rolling/braking/side friction.
@@ -85,6 +87,7 @@ export function computeGround(
 ): GroundResult {
   result.onGround = false;
   result.crash = null;
+  result.water = false;
 
   omegaW.copy(omegaBody).applyQuaternion(quat);
   fw.set(0, 0, -1).applyQuaternion(quat);
@@ -102,6 +105,7 @@ export function computeGround(
     const h = height(wp.x, wp.z);
     if (h < 0 && wp.y < 0) {
       result.crash = 'Im Wasser gelandet';
+      result.water = true;
       return result;
     }
     const d = h - wp.y;

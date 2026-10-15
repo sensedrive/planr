@@ -9,8 +9,9 @@ und auf der Meta Quest 2 im Browser – mit greifbarem Steuerknüppel, Gashebel,
 
 | Option | Auswahl |
 |---|---|
+| Landschaft | Alpental · Fjordküste (Schären, steile Fjorde, Insel- und Fjordflugplatz) · New York (echtes Manhattan) |
 | Flugzeug | Cessna-artig (Kolbenmotor, festes Fahrwerk) · Jet-Trainer (L-39-artig, Einziehfahrwerk) |
-| Mission | Freiflug · Luftstart · Landung (mit Wertung) · Ringparcours (Zeit) · Streckenflug zum Bergflugplatz |
+| Mission | Freiflug · Luftstart · Landung (mit Wertung) · Ringparcours (Zeit) · Streckenflug zum zweiten Platz · Notwasserung im Hudson (New York) |
 | Wind | Ruhig · Leicht · Stark · Böig |
 | Tageszeit | Tag · Abend · Nacht (mit Pistenbefeuerung) |
 | Flugverhalten | Einfach · Realistisch (Propeller-Effekte, asymmetrischer Strömungsabriss, Trudeln) |
@@ -19,6 +20,21 @@ und auf der Meta Quest 2 im Browser – mit greifbarem Steuerknüppel, Gashebel,
 
 Jede Landung wird bewertet (Sinkrate, Mittellinie, Aufsetzpunkt, Querlage, 0–3 Sterne).
 Neben jeder Schwelle zeigt ein **PAPI** den Gleitpfad: 2 weiß + 2 rot = richtig.
+
+### New York
+
+73 859 Gebäude aus echten Grundrissen und Dachhöhen (ganz Manhattan, in Brooklyn/Queens ab ~12 m), Hudson,
+East River, Central Park, LaGuardia (Pisten 04/22 und 13/31), Brooklyn-, Manhattan-, Williamsburg- und
+Queensboro Bridge, Freiheitsstatue, Spitzen von Empire State Building, One World Trade Center und Chrysler Building.
+Bei Nacht leuchten die Fenster. Gebäude sind fest – wer hineinfliegt, stürzt ab.
+
+Missionen: Sightseeing-Ringparcours (Hudson → Freiheitsstatue → East River → Central Park) und
+**Notwasserung**: Motorausfall über Upper Manhattan, Gleitflug zum Hudson – langsam, Flächen waagerecht,
+Nase leicht hoch aufsetzen.
+
+Datenquellen: Gebäude & Parks © [NYC Open Data](https://opendata.cityofnewyork.us/) (Building Footprints,
+Parks Properties) · Wasserflächen: US Census Bureau TIGER/Line (gemeinfrei) · Gelände: Mapzen/Tilezen Terrain
+Tiles (AWS Open Data). Neu erzeugen: `node scripts/data/build-nyc.mjs <rohdaten-ordner> public/data/nyc`.
 
 ## Steuerung
 
@@ -57,8 +73,8 @@ Ohne WLAN-HTTPS geht es auf der Quest auch per USB: `adb reverse tcp:5173 tcp:51
 
 - `src/sim` – 6-DOF-Flugphysik je Flugzeugtyp (`types.ts`): Aerodynamik mit Strömungsabriss, Trudeln und
   Bodeneffekt, Kolbenmotor/Jet-Triebwerk, Fahrwerk (auch einziehbar), ISA-Atmosphäre; fester 120-Hz-Takt
-- `src/world` – prozedurales Gelände mit LOD-Chunks (Kollision exakt auf dem sichtbaren Mesh), zwei Flugplätze,
-  PAPI, Befeuerung, Himmel/Tageszeiten, Wolken
+- `src/world` – Szenarien (`scenarios/`: Alpental, Fjordküste, New York), Gelände mit LOD-Chunks (Kollision exakt
+  auf dem sichtbaren Mesh, inkl. Gebäude), Stadt, Flugplätze, PAPI, Befeuerung, Himmel/Tageszeiten, Wolken
 - `src/game` – Einstellungen, Wetter, Missionen, Landewertung, Ringparcours
 - `src/cockpit` – Cockpit-Layouts, Instrumente, alle greif-/klickbaren Bedienelemente
 - `src/input` – Tastatur, Gamepad, VR-Controller, Maus-Klicks im Cockpit

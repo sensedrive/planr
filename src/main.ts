@@ -9,7 +9,7 @@ import { FlightAudio } from './core/audio';
 import { type Actions, clamp, createControlState } from './core/input';
 import { FixedStepLoop } from './core/loop';
 import { Missions } from './game/missions';
-import { loadBest, loadSettings, OPTIONS, saveSettings, type Settings } from './game/settings';
+import { choiceAvailable, loadBest, loadSettings, OPTIONS, saveSettings, type Settings } from './game/settings';
 import { Weather } from './game/weather';
 import { GamepadInput } from './input/gamepad';
 import { KeyboardInput } from './input/keyboardMouse';
@@ -22,9 +22,14 @@ import { JetModel } from './view/jetModel';
 import { CameraRig } from './view/cameras';
 import { Hud } from './view/hud';
 import { Vignette } from './view/vignette';
-import { createAirfields, createTrees } from './world/runway';
+import type { City } from './world/city';
+import { type Airfield, createAirfields, createTrees } from './world/runway';
+import { type Scenario, type ScenarioId, setScenario } from './world/scenario';
+import { createAlps } from './world/scenarios/alps';
+import { createFjord } from './world/scenarios/fjord';
+import { loadNyc, type NycWorld } from './world/scenarios/nyc';
 import { Environment } from './world/sky';
-import { createWater, surfaceHeight, Terrain } from './world/terrain';
+import { createWater, surfaceHeight, Terrain, terrainHeight } from './world/terrain';
 
 // ---- renderer & scene -------------------------------------------------------
 
@@ -44,9 +49,14 @@ const terrain = new Terrain();
 scene.add(terrain.group);
 const water = createWater();
 scene.add(water);
-const airfields = createAirfields(renderer.capabilities.getMaxAnisotropy());
-for (const a of airfields) scene.add(a.group);
-scene.add(createTrees());
+/** scenario-specific objects: airfields, trees, city, landmarks */
+const worldGroup = new THREE.Group();
+scene.add(worldGroup);
+let airfields: Airfield[] = [];
+let city: City | null = null;
+let nyc: NycWorld | null = null;
+const scenarios: Partial<Record<ScenarioId, Scenario>> = {};
+let activeScenario: ScenarioId | null = null;
 
 // ---- aircraft & game --------------------------------------------------------
 
@@ -89,6 +99,35 @@ let paused = false;
 let hintShown = false;
 let xrStartTime = 0;
 
+/** Switches the landscape: terrain, airfields, trees, city, water, clouds and ring course. */
+async function useScenario(id: ScenarioId): Promise<void> {
+  if (id === activeScenario) return;
+  let s: Scenario;
+  if (id === 'nyc') {
+    nyc ??= await loadNyc();
+    s = nyc.scenario;
+  } else {
+    s = scenarios[id] ??= id === 'fjord' ? createFjord() : createAlps();
+  }
+  setScenario(s);
+  activeScenario = id;
+  for (const child of [...worldGroup.children]) {
+    worldGroup.remove(child);
+    if (child !== nyc?.city.group && child !== nyc?.landmarks) child.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
+  }
+  airfields = createAirfields(s.airports, renderer.capabilities.getMaxAnisotropy());
+  for (const a of airfields) worldGroup.add(a.group);
+  const trees = createTrees(s);
+  if (trees) worldGroup.add(trees);
+  city = id === 'nyc' && nyc ? nyc.city : null;
+  if (city && nyc) worldGroup.add(city.group, nyc.landmarks);
+  terrain.reset();
+  water.material.color.set(s.waterColor);
+  env.setCloudBase(s.cloudBase);
+  missions.course.load(s.ringCourse(terrainHeight));
+  applyLive();
+}
+
 function bestText(): string {
   const fmt = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, '0')}`;
   const l = loadBest('landing');
@@ -96,7 +135,8 @@ function bestText(): string {
   const c = loadBest('crosscountry');
   const parts = [l !== null ? `Landung ${'★'.repeat(l) || '–'}` : null, r !== null ? `Ringe ${fmt(r)}` : null, c !== null ? `Bergflug ${fmt(c)}` : null];
   const list = parts.filter(Boolean).join(' · ');
-  return list ? `Bestwerte: ${list}` : '';
+  const best = list ? `Bestwerte: ${list}` : '';
+  return activeScenario === 'nyc' && nyc ? [best, nyc.attribution].filter(Boolean).join(' — ') : best;
 }
 
 function useAircraft(id: AircraftId): void {
@@ -116,13 +156,31 @@ function applyLive(): void {
   stickConfig.travel = settings.stick;
   env.setTime(settings.time);
   for (const a of airfields) a.setNight(settings.time !== 'day');
+  city?.setLights(settings.time === 'night' ? 1 : settings.time === 'evening' ? 0.55 : 0);
 }
 
-function startFlight(override?: Partial<Settings>): void {
+let loading = false;
+
+async function startFlight(override?: Partial<Settings>): Promise<void> {
+  if (loading) return;
+  if (settings.scenario !== activeScenario) {
+    loading = true;
+    const text = settings.scenario === 'nyc' ? 'Lade New York …' : 'Baue Landschaft …';
+    hud.setMessage(text);
+    cockpit().setMessage(text);
+    try {
+      await useScenario(settings.scenario);
+    } finally {
+      loading = false;
+      hud.setMessage('');
+      cockpit().setMessage('');
+    }
+  }
   useAircraft(settings.aircraft);
   missions.start({ ...settings, ...override }, controls);
   aircraft.interpolate(1, aircraftRoot);
   terrain.update(aircraft.pos.x, aircraft.pos.z, Infinity);
+  city?.update(aircraft.pos.x, aircraft.pos.z, Infinity);
   started = true;
   paused = false;
   hintShown = false;
@@ -133,10 +191,13 @@ function startFlight(override?: Partial<Settings>): void {
 const handlers: MenuHandlers = {
   change(key, value) {
     (settings as unknown as Record<string, string | number>)[key] = value;
+    // a mission that does not exist in the new landscape falls back to free flight
+    const mission = OPTIONS.find((o) => o.key === 'mission')!.choices.find((c) => c.value === settings.mission);
+    if (mission && !choiceAvailable(mission, settings)) settings.mission = 'free';
     saveSettings(settings);
     applyLive();
   },
-  fly: () => startFlight(),
+  fly: () => void startFlight(),
   resume: () => closeMenu(),
 };
 
@@ -158,7 +219,7 @@ function closeMenu(): void {
 }
 
 const actions: Actions = {
-  reset: (airStart = false) => startFlight(airStart ? { mission: 'airstart' } : undefined),
+  reset: (airStart = false) => void startFlight(airStart ? { mission: 'airstart' } : undefined),
   toggleCamera: () => cameraRig.toggle(),
   recenter: () => cameraRig.recenter(),
   togglePause: () => (paused = !paused),
@@ -218,9 +279,10 @@ window.addEventListener('resize', onResize);
 
 // ---- main loop --------------------------------------------------------------
 
+await useScenario(settings.scenario === 'nyc' ? 'alps' : settings.scenario);
 applyLive();
 useAircraft(settings.aircraft);
-missions.start(settings, controls);
+missions.start({ ...settings, scenario: activeScenario! }, controls);
 aircraft.interpolate(1, aircraftRoot);
 terrain.update(aircraft.pos.x, aircraft.pos.z, Infinity);
 menu.show(false, bestText());
@@ -299,6 +361,7 @@ renderer.setAnimationLoop((time) => {
   }
 
   terrain.update(pos.x, pos.z, xr ? 2 : 4);
+  city?.update(pos.x, pos.z, xr ? 2 : 3);
   env.update(dt, pos);
   water.position.set(Math.round(pos.x / 100) * 100, 0, Math.round(pos.z / 100) * 100);
   cameraRig.update(dt);
@@ -312,6 +375,9 @@ renderer.setAnimationLoop((time) => {
   const notice = missions.notice;
   if (menuOpen) {
     // the menu says it all
+  } else if (aircraft.crashed && aircraft.ditched) {
+    title = '✔ Notwasserung gelungen!';
+    subtitle = xr ? 'A: Neustart · Stick-Klick: Menü' : 'R: Neustart · Esc: Menü';
   } else if (aircraft.crashed) {
     title = `Absturz: ${aircraft.crashReason}`;
     subtitle = xr ? 'A: Neustart · Stick-Klick: Menü' : 'R: Neustart · Esc: Menü';

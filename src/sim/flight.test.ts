@@ -1,11 +1,15 @@
 import { Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { approachAxis, type ControlState, createControlState } from '../core/input';
-import { HOME, runwayPoint } from '../world/airports';
+import { runwayPoint } from '../world/airports';
+import { home, setScenario } from '../world/scenario';
+import { createAlps } from '../world/scenarios/alps';
 import { surfaceHeight } from '../world/terrain';
 import { Aircraft } from './aircraft';
 import { type AircraftType, C172, JET } from './types';
 
+setScenario(createAlps());
+const HOME = home();
 const DT = 1 / 120;
 const clamp = (x: number, a = -1, b = 1) => Math.max(a, Math.min(b, x));
 

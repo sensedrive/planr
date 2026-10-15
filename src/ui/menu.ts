@@ -1,4 +1,4 @@
-import { OPTIONS, type Settings } from '../game/settings';
+import { choiceAvailable, OPTIONS, type Settings } from '../game/settings';
 
 export interface MenuHandlers {
   change(key: keyof Settings, value: string | number): void;
@@ -87,7 +87,10 @@ export class Menu {
   refresh(): void {
     for (const opt of OPTIONS) {
       const buttons = this.rows.get(opt.key)!;
-      opt.choices.forEach((ch, i) => buttons[i].classList.toggle('active', this.settings[opt.key] === ch.value));
+      opt.choices.forEach((ch, i) => {
+        buttons[i].classList.toggle('active', this.settings[opt.key] === ch.value);
+        buttons[i].disabled = !choiceAvailable(ch, this.settings);
+      });
     }
   }
 }

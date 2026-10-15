@@ -1,5 +1,6 @@
 import type { Touchdown } from '../sim/aircraft';
-import { type Airport, airportAt, runwayLocal } from '../world/airports';
+import { type Airport, runwayLocal } from '../world/airports';
+import { airportAt } from '../world/scenario';
 
 const AIM_POINT = 300; // m after the threshold
 

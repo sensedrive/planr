@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { OPTIONS, type Settings } from '../game/settings';
+import { choiceAvailable, OPTIONS, type Settings } from '../game/settings';
 import type { MenuHandlers } from './menu';
 
 const W = 1024;
-const H = 1060;
+const H = 1150;
 const ROW_H = 84;
 const TOP = 110;
 const LABEL_W = 300;
@@ -156,7 +156,15 @@ export class VRMenu {
       const gap = 10;
       const w = (W - LABEL_W - 40 - gap * (n - 1)) / n;
       opt.choices.forEach((ch, i) => {
-        this.button(LABEL_W + i * (w + gap), y, w, ROW_H - 16, ch.label, this.settings[opt.key] === ch.value, () => {
+        const x = LABEL_W + i * (w + gap);
+        if (!choiceAvailable(ch, this.settings)) {
+          ctx.globalAlpha = 0.3;
+          this.button(x, y, w, ROW_H - 16, ch.label, false, () => {});
+          this.hits.pop();
+          ctx.globalAlpha = 1;
+          return;
+        }
+        this.button(x, y, w, ROW_H - 16, ch.label, this.settings[opt.key] === ch.value, () => {
           this.handlers.change(opt.key, ch.value);
           this.draw();
         });

@@ -1,10 +1,12 @@
 import type { AircraftId } from '../sim/types';
+import type { ScenarioId } from '../world/scenario';
 import type { TimeOfDay } from '../world/sky';
 import type { WindSetting } from './weather';
 
-export type MissionId = 'free' | 'airstart' | 'landing' | 'rings' | 'crosscountry';
+export type MissionId = 'free' | 'airstart' | 'landing' | 'rings' | 'crosscountry' | 'ditching';
 
 export interface Settings {
+  scenario: ScenarioId;
   aircraft: AircraftId;
   mission: MissionId;
   wind: WindSetting;
@@ -21,6 +23,12 @@ export interface Settings {
 export interface Choice {
   value: string | number;
   label: string;
+  /** only offered in these landscapes */
+  only?: ScenarioId[];
+}
+
+export function choiceAvailable(ch: Choice, s: Settings): boolean {
+  return !ch.only || ch.only.includes(s.scenario);
 }
 
 export interface OptionDef {
@@ -32,6 +40,15 @@ export interface OptionDef {
 }
 
 export const OPTIONS: OptionDef[] = [
+  {
+    key: 'scenario',
+    label: 'Landschaft',
+    choices: [
+      { value: 'alps', label: 'Alpental' },
+      { value: 'fjord', label: 'Fjordküste' },
+      { value: 'nyc', label: 'New York' },
+    ],
+  },
   {
     key: 'aircraft',
     label: 'Flugzeug',
@@ -48,7 +65,8 @@ export const OPTIONS: OptionDef[] = [
       { value: 'airstart', label: 'Luftstart' },
       { value: 'landing', label: 'Landung' },
       { value: 'rings', label: 'Ringe' },
-      { value: 'crosscountry', label: 'Bergflugplatz' },
+      { value: 'crosscountry', label: 'Streckenflug', only: ['alps', 'fjord'] },
+      { value: 'ditching', label: 'Notwasserung', only: ['nyc'] },
     ],
   },
   {
@@ -121,6 +139,7 @@ export const OPTIONS: OptionDef[] = [
 ];
 
 export const DEFAULT_SETTINGS: Settings = {
+  scenario: 'alps',
   aircraft: 'c172',
   mission: 'free',
   wind: 'light',
