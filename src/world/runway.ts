@@ -1,13 +1,14 @@
 import * as THREE from 'three';
-import { type Airport, runwayLocal, runwayPoint } from './airports';
-import type { Scenario } from './scenario';
-import { mulberry32, terrainHeight } from './terrain';
+import { type Airport, runwayPoint } from './airports';
+import { mulberry32 } from './terrain';
+import { mergeChildMeshes } from '../view/merge';
 
 const DEG = Math.PI / 180;
 /** PAPI light thresholds from the runway side outward (inner lights turn red first). */
 const PAPI_ANGLES = [3.5, 3.17, 2.83, 2.5].map((d) => d * DEG);
 const PAPI_DIST = 300;
 const WHITE = new THREE.Color(1, 1, 1);
+const papiHousing = new THREE.MeshLambertMaterial({ color: 0x333333 });
 const RED = new THREE.Color(1, 0.12, 0.1);
 
 function runwayTexture(a: Airport, maxAnisotropy: number): THREE.CanvasTexture {
@@ -117,6 +118,7 @@ export class Airfield {
     );
     runway.position.set(a.center.x, y + 0.03, a.center.z);
     runway.rotation.y = -a.heading * DEG;
+    runway.receiveShadow = true;
     this.group.add(runway);
 
     // edge lights (white), thresholds (green) and runway ends (red) – visible at dusk and night
@@ -164,7 +166,7 @@ export class Airfield {
       this.papis.push({ points, colors, base: runwayPoint(a, along, 0, 1), dir });
       // small housings for daytime look
       for (let i = 0; i < 4; i++) {
-        const box = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.8, 0.6), new THREE.MeshLambertMaterial({ color: 0x333333 }));
+        const box = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.8, 0.6), papiHousing);
         box.position.set(ppos[i * 3], y + 0.4, ppos[i * 3 + 2]);
         box.rotation.y = -a.heading * DEG;
         this.group.add(box);
@@ -187,6 +189,13 @@ export class Airfield {
     this.group.add(this.sock);
 
     if (a.buildings) this.addBuildings();
+    this.group.traverse((o) => {
+      if (o instanceof THREE.Mesh && o !== runway) {
+        o.castShadow = true;
+        o.receiveShadow = true;
+      }
+    });
+    mergeChildMeshes(this.group);
   }
 
   private addBuildings(): void {
@@ -248,49 +257,6 @@ export class Airfield {
     // sock points downwind and lifts with wind speed (full at ~15 kt)
     this.sock.rotation.set(0, Math.atan2(-wind.z, wind.x), -Math.PI / 2 + Math.min(1, speed / 7.7) * (Math.PI / 2 - 0.05));
   }
-}
-
-export function createTrees(sc: Scenario): THREE.InstancedMesh | null {
-  const area = sc.trees;
-  if (!area) return null;
-  const home = sc.airports[0];
-  const rand = mulberry32(99);
-  const geo = new THREE.ConeGeometry(3.5, 12, 6).translate(0, 6, 0);
-  const mat = new THREE.MeshLambertMaterial({ flatShading: true });
-  const max = 3500;
-  const mesh = new THREE.InstancedMesh(geo, mat, max);
-  const m = new THREE.Matrix4();
-  const q = new THREE.Quaternion();
-  const p = new THREE.Vector3();
-  const s = new THREE.Vector3();
-  const c = new THREE.Color();
-  let n = 0;
-  for (let tries = 0; tries < max * 4 && n < max; tries++) {
-    const x = area.center.x + (rand() - 0.5) * 2 * area.radius;
-    const z = area.center.z + (rand() - 0.5) * 2 * area.radius;
-    const local = runwayLocal(home, x, z);
-    if (Math.abs(local.lateral) < 140 && Math.abs(local.along) < 900) continue; // runway clearance
-    if (local.lateral > 30 && local.lateral < 260 && local.along > -400 && local.along < -120) continue; // apron & hangars
-    if (sc.airports.some((a) => {
-      const p = runwayLocal(a, x, z);
-      return Math.abs(p.lateral) < a.width / 2 + 80 && Math.abs(p.along) < a.length / 2 + 300;
-    })) continue;
-    const h = terrainHeight(x, z);
-    const slope = Math.abs(terrainHeight(x + 8, z) - h) + Math.abs(terrainHeight(x, z + 8) - h);
-    if (!area.ok(x, z, h, slope)) continue;
-    if (Math.sin(x * 0.004) * Math.cos(z * 0.0035) < -0.1 && rand() < 0.8) continue;
-    const size = 0.6 + rand() * 0.9;
-    p.set(x, h - 0.5, z);
-    s.set(size, size * (0.8 + rand() * 0.5), size);
-    m.compose(p, q, s);
-    mesh.setMatrixAt(n, m);
-    c.setHSL(0.27 + rand() * 0.06, 0.45, 0.18 + rand() * 0.1);
-    mesh.setColorAt(n, c);
-    n++;
-  }
-  mesh.count = n;
-  mesh.computeBoundingSphere();
-  return mesh;
 }
 
 export function createAirfields(airports: Airport[], maxAnisotropy: number): Airfield[] {

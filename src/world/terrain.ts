@@ -31,6 +31,14 @@ export function terrainHeight(x: number, z: number): number {
 }
 
 /**
+ * Cell split rule shared by mesh and collision: cut each quad along the diagonal with the smaller
+ * height difference, so steep walls do not turn into saw teeth.
+ */
+function splitAD(ha: number, hb: number, hc: number, hd: number): boolean {
+  return Math.abs(ha - hd) < Math.abs(hb - hc);
+}
+
+/**
  * Solid surface for physics: the rendered (finest LOD) terrain triangles – same grid and diagonal as
  * buildChunkGeometry – plus obstacles such as building roofs.
  */
@@ -43,14 +51,17 @@ export function surfaceHeight(x: number, z: number): number {
   const fz = gz - j;
   const x0 = i * FINE_STEP;
   const z0 = j * FINE_STEP;
+  const ha = terrainHeight(x0, z0);
   const hb = terrainHeight(x0 + FINE_STEP, z0);
   const hc = terrainHeight(x0, z0 + FINE_STEP);
+  const hd = terrainHeight(x0 + FINE_STEP, z0 + FINE_STEP);
   let h: number;
-  if (fx + fz <= 1) {
-    const ha = terrainHeight(x0, z0);
+  if (splitAD(ha, hb, hc, hd)) {
+    // triangles (a, c, d) and (a, d, b)
+    h = fz >= fx ? ha + (hd - hc) * fx + (hc - ha) * fz : ha + (hb - ha) * fx + (hd - hb) * fz;
+  } else if (fx + fz <= 1) {
     h = ha + (hb - ha) * fx + (hc - ha) * fz;
   } else {
-    const hd = terrainHeight(x0 + FINE_STEP, z0 + FINE_STEP);
     h = hd + (hc - hd) * (1 - fx) + (hb - hd) * (1 - fz);
   }
   const obstacle = scenario().obstacleHeight;
@@ -58,6 +69,80 @@ export function surfaceHeight(x: number, z: number): number {
 }
 
 const tmpC = new THREE.Color();
+
+// ---- coarse height cache for shadow rays -------------------------------------------------
+const HC_CELL = 40;
+const HC_BLOCK = 64;
+const hcBlocks = new Map<number, Float32Array>();
+
+function hcBlock(bx: number, bz: number): Float32Array {
+  const key = (bx + 2048) * 4096 + (bz + 2048);
+  let b = hcBlocks.get(key);
+  if (!b) {
+    const n = HC_BLOCK + 1;
+    b = new Float32Array(n * n);
+    for (let j = 0; j < n; j++)
+      for (let i = 0; i < n; i++) b[j * n + i] = Math.max(0, terrainHeight((bx * HC_BLOCK + i) * HC_CELL, (bz * HC_BLOCK + j) * HC_CELL));
+    hcBlocks.set(key, b);
+  }
+  return b;
+}
+
+/** Bilinear ground height (never below sea level) from a 40 m grid, cached in 2.5 km blocks. */
+export function coarseHeight(x: number, z: number): number {
+  const gx = x / HC_CELL;
+  const gz = z / HC_CELL;
+  const ix = Math.floor(gx);
+  const iz = Math.floor(gz);
+  const bx = Math.floor(ix / HC_BLOCK);
+  const bz = Math.floor(iz / HC_BLOCK);
+  const b = hcBlock(bx, bz);
+  const li = ix - bx * HC_BLOCK;
+  const lj = iz - bz * HC_BLOCK;
+  const fx = gx - ix;
+  const fz = gz - iz;
+  const n = HC_BLOCK + 1;
+  const k = lj * n + li;
+  return (b[k] * (1 - fx) + b[k + 1] * fx) * (1 - fz) + (b[k + n] * (1 - fx) + b[k + n + 1] * fx) * fz;
+}
+
+/** Direction towards the sun used for baked terrain shadows. */
+const sun = new THREE.Vector3(-0.45, 0.62, -0.5).normalize();
+const SHADOW_STEPS = [12, 25, 45, 75, 115, 165, 230, 320, 440, 590, 780, 1020, 1330, 1720, 2200, 2800, 3500];
+
+/**
+ * Sun visibility (soft, 0…1) and ambient occlusion for a ground point: march towards the sun over
+ * the coarse heights; sample the surrounding ground for how much sky is hidden.
+ */
+function shadeAt(x: number, z: number, h: number): [number, number] {
+  const horiz = Math.hypot(sun.x, sun.z) || 1e-6;
+  const sx = sun.x / horiz;
+  const sz = sun.z / horiz;
+  const tanE = sun.y / horiz;
+  let lit = 1;
+  if (tanE <= 0) lit = 0;
+  else {
+    for (const d of SHADOW_STEPS) {
+      const ray = h + d * tanE;
+      if (ray > 2200) break;
+      // penumbra widens with distance to the occluder, like real sunlight
+      const pen = (coarseHeight(x + sx * d, z + sz * d) - ray) / (d * 0.13 + 6);
+      if (pen > 0) {
+        lit = Math.min(lit, 1 - Math.min(1, pen));
+        if (lit <= 0) break;
+      }
+    }
+  }
+  let occ = 0;
+  for (let a = 0; a < 6; a++) {
+    const ang = (a / 6) * Math.PI * 2 + 0.3;
+    const cx = Math.cos(ang);
+    const cz = Math.sin(ang);
+    for (const r of [40, 110]) occ += Math.max(0, Math.atan((coarseHeight(x + cx * r, z + cz * r) - h) / r));
+  }
+  const ao = Math.max(0.6, 1 - (occ / 12 / (Math.PI / 2)) * 1.3);
+  return [lit, ao];
+}
 
 /** Builds one terrain chunk with a downward skirt that hides LOD cracks. */
 /** Neighbour resolutions along the chunk edges: z = 0 (north), z = size (south), x = 0 (west), x = size (east). */
@@ -106,7 +191,36 @@ function buildChunkGeometry(x0: number, z0: number, size: number, segs: number, 
   const pos = new Float32Array(count * 3);
   const nor = new Float32Array(count * 3);
   const col = new Float32Array(count * 3);
+  const shade = new Float32Array(count * 2);
   const normal = new THREE.Vector3();
+  // shading on every 2nd vertex of fine chunks, interpolated in between
+  const stride = segs >= 64 ? 2 : 1;
+  const sn = Math.floor(segs / stride) + 1;
+  const coarse = new Float32Array(sn * sn * 2);
+  for (let j = 0; j < sn; j++)
+    for (let i = 0; i < sn; i++) {
+      const [lit, ao] = shadeAt(x0 + i * stride * step, z0 + j * stride * step, H(i * stride, j * stride));
+      coarse[(j * sn + i) * 2] = lit;
+      coarse[(j * sn + i) * 2 + 1] = ao;
+    }
+  // soften the shadow field (3 × 3 blur) so its edge does not follow the triangle zig-zag
+  const blurred = coarse.slice();
+  for (let j = 0; j < sn; j++)
+    for (let i = 0; i < sn; i++) {
+      let sum = 0;
+      let w = 0;
+      for (let b = -1; b <= 1; b++)
+        for (let a = -1; a <= 1; a++) {
+          const ii = i + a;
+          const jj = j + b;
+          if (ii < 0 || jj < 0 || ii >= sn || jj >= sn) continue;
+          const k = a === 0 && b === 0 ? 2 : 1;
+          sum += coarse[(jj * sn + ii) * 2] * k;
+          w += k;
+        }
+      blurred[(j * sn + i) * 2] = sum / w;
+    }
+  coarse.set(blurred);
 
   for (let j = 0; j < n; j++) {
     for (let i = 0; i < n; i++) {
@@ -123,6 +237,19 @@ function buildChunkGeometry(x0: number, z0: number, size: number, segs: number, 
       col[k * 3] = tmpC.r;
       col[k * 3 + 1] = tmpC.g;
       col[k * 3 + 2] = tmpC.b;
+      const ci = Math.min(sn - 1, Math.floor(i / stride));
+      const cj = Math.min(sn - 1, Math.floor(j / stride));
+      const ci1 = Math.min(sn - 1, ci + 1);
+      const cj1 = Math.min(sn - 1, cj + 1);
+      const fx = (i - ci * stride) / stride;
+      const fz = (j - cj * stride) / stride;
+      for (let q = 0; q < 2; q++) {
+        const v00 = coarse[(cj * sn + ci) * 2 + q];
+        const v10 = coarse[(cj * sn + ci1) * 2 + q];
+        const v01 = coarse[(cj1 * sn + ci) * 2 + q];
+        const v11 = coarse[(cj1 * sn + ci1) * 2 + q];
+        shade[k * 2 + q] = (v00 * (1 - fx) + v10 * fx) * (1 - fz) + (v01 * (1 - fx) + v11 * fx) * fz;
+      }
     }
   }
 
@@ -133,7 +260,8 @@ function buildChunkGeometry(x0: number, z0: number, size: number, segs: number, 
       const b = a + 1;
       const c = a + n;
       const d = c + 1;
-      index.push(a, c, b, b, c, d);
+      if (splitAD(H(i, j), H(i + 1, j), H(i, j + 1), H(i + 1, j + 1))) index.push(a, c, d, a, d, b);
+      else index.push(a, c, b, b, c, d);
     }
   }
 
@@ -157,6 +285,8 @@ function buildChunkGeometry(x0: number, z0: number, size: number, segs: number, 
         nor[v * 3 + q] = nor[src * 3 + q];
         col[v * 3 + q] = col[src * 3 + q];
       }
+      shade[v * 2] = shade[src * 2];
+      shade[v * 2 + 1] = shade[src * 2 + 1];
       v++;
     }
     for (let t = 0; t < segs; t++) {
@@ -173,6 +303,7 @@ function buildChunkGeometry(x0: number, z0: number, size: number, segs: number, 
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.setAttribute('shade', new THREE.BufferAttribute(shade, 2));
   geo.setIndex(index);
   geo.computeBoundingSphere();
   return geo;
@@ -203,8 +334,18 @@ export class Terrain {
     applyTerrainDetail(this.material);
   }
 
+  /** Sun direction for the baked shadows; rebuilds the terrain when it changes. */
+  setSun(dir: THREE.Vector3): void {
+    if (dir.distanceToSquared(sun) < 1e-8) return;
+    sun.copy(dir).normalize();
+    // keep the old meshes visible until their replacements are built
+    for (const c of this.chunks.values()) c.sig = 'stale';
+    this.centerKey = '';
+  }
+
   /** Drops all chunks, e.g. after switching the scenario. */
   reset(): void {
+    hcBlocks.clear();
     for (const c of this.chunks.values()) {
       this.group.remove(c.mesh);
       c.mesh.geometry.dispose();
@@ -266,6 +407,7 @@ export class Terrain {
     const mesh = new THREE.Mesh(geo, this.material);
     mesh.position.set(cx * CHUNK_SIZE, 0, cz * CHUNK_SIZE);
     mesh.matrixAutoUpdate = false;
+    mesh.receiveShadow = true;
     mesh.updateMatrix();
     this.group.add(mesh);
     if (old) {
@@ -278,6 +420,8 @@ export class Terrain {
 
 /** Sea plane that follows the aircraft. */
 const WATER_SIZE = 16000;
+/** colour the water reflects at grazing angles (the horizon); set by the environment */
+export const waterSky = { value: new THREE.Color(0xbcd2e6) };
 /** wave texture tile (m); the plane snaps by multiples of it so the waves never jump */
 export const WATER_TILE = 50;
 
@@ -289,6 +433,19 @@ export function createWater(): THREE.Mesh<THREE.PlaneGeometry, THREE.MeshPhongMa
   normals.needsUpdate = true;
   normals.repeat.set(WATER_SIZE / WATER_TILE, WATER_SIZE / WATER_TILE);
   const mat = new THREE.MeshPhongMaterial({ color: 0x2f6f8f, specular: 0x9aa6b0, shininess: 90, normalMap: normals, normalScale: new THREE.Vector2(0.55, 0.55) });
+  // Fresnel: at grazing angles the water mirrors the sky, looking down you see into the depth
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uSkyColor = waterSky;
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 uSkyColor;')
+      .replace(
+        '#include <opaque_fragment>',
+        `float fres = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 4.0);
+        outgoingLight = mix(outgoingLight, uSkyColor, clamp(fres * 0.85, 0.0, 0.85));
+        #include <opaque_fragment>`,
+      );
+  };
+  mat.customProgramCacheKey = () => 'water-fresnel-v1';
   const mesh = new THREE.Mesh(geo, mat);
   mesh.name = 'water';
   return mesh;

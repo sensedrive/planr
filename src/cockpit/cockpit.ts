@@ -6,6 +6,7 @@ import { buildCabin, buildCanopy, type Dims } from './interior';
 import { type InstrumentConfig, type InstrumentData, Instruments } from './instruments';
 import type { CockpitLayout } from './layout';
 import { panelArt, plastic } from './textures';
+import { mergeChildMeshes } from '../view/merge';
 
 const panelMat = new THREE.MeshLambertMaterial({ color: 0x2b2c2f });
 const glareMat = new THREE.MeshLambertMaterial({ map: plastic('#26272a') });
@@ -118,6 +119,8 @@ export class Cockpit {
     this.board.renderOrder = 10;
     this.board.visible = false;
     g.add(this.board);
+    // interior shell: one draw call per material
+    mergeChildMeshes(g);
   }
 
   update(dt: number, c: ControlState, gearPosition: number, data: InstrumentData, status: string, target: THREE.Vector3 | null, hud: HudData): void {

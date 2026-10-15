@@ -44,6 +44,10 @@ const C_GRASS2 = new THREE.Color(0x7c9a45);
 const C_FOREST = new THREE.Color(0x355e2b);
 const C_ROCK = new THREE.Color(0x7a746b);
 const C_SNOW = new THREE.Color(0xf2f4f6);
+// valley floor patchwork: hay, fields, darker pasture
+const C_HAY = new THREE.Color(0x9c9a52);
+const C_FIELD = new THREE.Color(0x7d6a45);
+const C_PASTURE = new THREE.Color(0x456f2f);
 
 export function createAlps(): Scenario {
   const site = findMountainSite();
@@ -56,6 +60,12 @@ export function createAlps(): Scenario {
     color(x, z, h, ny, out) {
       const field = noiseD(x * 0.004, z * 0.004);
       out.copy(C_GRASS).lerp(C_GRASS2, field * 0.5 + 0.5);
+      // fields on the flatter, lower ground in blocky patches
+      const lowland = (1 - smooth(h, 120, 220)) * smooth(ny, 0.94, 0.99);
+      const cell = noiseC(Math.floor(x / 180) * 1.7, Math.floor(z / 240) * 1.3);
+      if (cell > 0.35) out.lerp(C_HAY, lowland * 0.7);
+      else if (cell < -0.4) out.lerp(C_FIELD, lowland * 0.6);
+      else if (cell < -0.1) out.lerp(C_PASTURE, lowland * 0.5);
       out.lerp(C_FOREST, smooth(h + field * 40, 140, 260));
       out.lerp(C_ROCK, smooth(h, 420, 560));
       out.lerp(C_ROCK, smooth(1 - ny, 0.25, 0.45));
@@ -66,7 +76,7 @@ export function createAlps(): Scenario {
     airports: [home, mountain],
     destination: mountain,
     missions: ['free', 'airstart', 'landing', 'rings', 'crosscountry'],
-    trees: { center: new THREE.Vector3(0, 0, 0), radius: 3500, ok: (_x, _z, h, slope) => h > 4 && h < 320 && slope < 6 },
+    trees: { center: new THREE.Vector3(0, 0, 0), radius: 3500, ok: (_x, _z, h, slope) => h > 4 && h < 430 && slope < 9 },
     cloudBase: 1100,
     waterColor: 0x2f6f8f,
     ringCourse: (height) => valleyCourse(height, home, 2024),

@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { mulberry32 } from './noise';
+import { detailTexture } from './surfaces';
+import { waterSky } from './terrain';
 
 export type TimeOfDay = 'day' | 'evening' | 'night';
 
@@ -22,32 +24,32 @@ interface Look {
 const LOOKS: Record<TimeOfDay, Look> = {
   day: {
     sunDir: new THREE.Vector3(-0.45, 0.62, -0.5).normalize(),
-    top: 0x3d78c2,
-    horizon: 0xc4dbee,
-    sunColor: 0xfff1dc,
-    sunIntensity: 2.4,
-    hemiSky: 0xcfe3ff,
-    hemiGround: 0x5b5040,
-    hemiIntensity: 1.4,
-    fogNear: 1500,
+    top: 0x2c66b8,
+    horizon: 0xbcd2e6,
+    sunColor: 0xfff0dc,
+    sunIntensity: 3.8,
+    hemiSky: 0xb3cdf0,
+    hemiGround: 0x6a5d47,
+    hemiIntensity: 1.3,
+    fogNear: 500,
     fogFar: 5200,
-    cloud: 0x6a7480,
+    cloud: 0x8f9bad,
     cloudColor: 0xffffff,
     sunGlow: 1,
   },
   evening: {
     sunDir: new THREE.Vector3(-0.8, 0.09, -0.6).normalize(),
-    top: 0x2a4a86,
-    horizon: 0xf0a56a,
-    sunColor: 0xffb070,
-    sunIntensity: 1.6,
-    hemiSky: 0xf2c3a0,
+    top: 0x24447e,
+    horizon: 0xf2a768,
+    sunColor: 0xffa860,
+    sunIntensity: 2.6,
+    hemiSky: 0xd9b7a4,
     hemiGround: 0x3d3030,
-    hemiIntensity: 0.9,
-    fogNear: 1200,
+    hemiIntensity: 0.75,
+    fogNear: 400,
     fogFar: 5000,
-    cloud: 0x5a3a40,
-    cloudColor: 0xe8b8a0,
+    cloud: 0x6a5468,
+    cloudColor: 0xffc49a,
     sunGlow: 1.6,
   },
   night: {
@@ -59,10 +61,10 @@ const LOOKS: Record<TimeOfDay, Look> = {
     hemiSky: 0x40507a,
     hemiGround: 0x101010,
     hemiIntensity: 0.22,
-    fogNear: 900,
+    fogNear: 400,
     fogFar: 4500,
-    cloud: 0x0c1018,
-    cloudColor: 0x1a2030,
+    cloud: 0x0a0d14,
+    cloudColor: 0x2a3244,
     sunGlow: 0.15,
   },
 };
@@ -103,6 +105,54 @@ const fragment = /* glsl */ `
 `;
 
 const CLOUD_BOX = 14000;
+
+const cloudVertex = /* glsl */ `
+  #include <common>
+  #include <fog_pars_vertex>
+  varying vec2 vUv;
+  varying float vHeight;
+  varying float vSeed;
+  void main() {
+    vUv = uv;
+    vec4 c = modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+    float s = length(instanceMatrix[0].xyz);
+    // camera-facing quad (billboard), a bit flatter than wide
+    vec3 right = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
+    vec3 up = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
+    vec3 wp = c.xyz + (right * position.x + up * position.y * 0.7) * s * 2.4;
+    vHeight = position.y;
+    vSeed = fract(c.x * 0.0137 + c.z * 0.0071);
+    vec4 mvPosition = viewMatrix * vec4(wp, 1.0);
+    gl_Position = projectionMatrix * mvPosition;
+    #include <fog_vertex>
+  }
+`;
+
+const cloudFragment = /* glsl */ `
+  #include <common>
+  #include <fog_pars_fragment>
+  uniform vec3 uLit;
+  uniform vec3 uShade;
+  uniform sampler2D uNoise;
+  varying vec2 vUv;
+  varying float vHeight;
+  varying float vSeed;
+  void main() {
+    vec2 p = vUv * 2.0 - 1.0;
+    float n = texture2D(uNoise, vUv * 0.8 + vSeed * 7.0).r;
+    float n2 = texture2D(uNoise, vUv * 2.3 + vSeed * 3.0).r;
+    float r = length(p) + (n - 0.5) * 0.55 + (n2 - 0.5) * 0.2;
+    float a = smoothstep(1.0, 0.45, r) * 0.9;
+    if (a < 0.02) discard;
+    // sunlit tops, darker flat bases
+    float lit = smoothstep(-0.45, 0.35, vHeight + (n - 0.5) * 0.35);
+    vec3 col = mix(uShade, uLit, lit);
+    gl_FragColor = vec4(col, a);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+    #include <fog_fragment>
+  }
+`;
 const CLUSTERS = 90;
 const PUFFS = 6;
 const RAIN_DROPS = 1400;
@@ -164,7 +214,7 @@ export class Environment {
   private readonly uniforms: Record<string, THREE.IUniform>;
   private readonly sun = new THREE.DirectionalLight();
   private readonly hemi = new THREE.HemisphereLight();
-  private readonly cloudMat: THREE.MeshLambertMaterial;
+  private readonly cloudMat: THREE.ShaderMaterial;
   private readonly base: THREE.Vector3[] = [];
   private readonly scale: number[] = [];
   private cloudTimer = 0;
@@ -195,15 +245,34 @@ export class Environment {
     this.sky = new THREE.Mesh(new THREE.SphereGeometry(1000, 24, 12), mat);
     this.sky.renderOrder = -1;
     this.sky.frustumCulled = false;
-    scene.add(this.sky, this.sun, this.hemi);
+    scene.add(this.sky, this.sun, this.sun.target, this.hemi);
+    // real-time shadows for nearby objects; the frustum follows the aircraft
+    this.sun.castShadow = true;
+    this.sun.shadow.mapSize.set(2048, 2048);
+    this.sun.shadow.bias = -0.0004;
+    this.sun.shadow.normalBias = 0.6;
+    this.sun.shadow.camera.near = 10;
+    this.sun.shadow.camera.far = 4000;
     scene.fog = new THREE.Fog(this.horizon, 1500, 5200);
     scene.background = this.horizon;
 
     const rand = mulberry32(42);
-    this.cloudMat = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
+    this.cloudMat = new THREE.ShaderMaterial({
+      vertexShader: cloudVertex,
+      fragmentShader: cloudFragment,
+      uniforms: THREE.UniformsUtils.merge([
+        THREE.UniformsLib.fog,
+        { uLit: { value: new THREE.Color() }, uShade: { value: new THREE.Color() }, uNoise: { value: null } },
+      ]),
+      fog: true,
+      transparent: true,
+      depthWrite: false,
+    });
+    this.cloudMat.uniforms.uNoise.value = detailTexture();
     const clusters = CLUSTERS;
     const puffs = PUFFS;
-    this.clouds = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), this.cloudMat, clusters * puffs);
+    this.clouds = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), this.cloudMat, clusters * puffs);
+    this.clouds.renderOrder = 3;
     this.clouds.frustumCulled = false;
     for (let c = 0; c < clusters; c++) {
       const cx = (rand() - 0.5) * CLOUD_BOX;
@@ -249,7 +318,6 @@ export class Environment {
     this.uniforms.uStars.value = time === 'night' ? 0.8 : 0;
     this.sun.color.set(l.sunColor);
     this.sun.intensity = l.sunIntensity;
-    this.sun.position.copy(l.sunDir).multiplyScalar(1000);
     this.hemi.color.set(l.hemiSky);
     this.hemi.groundColor.set(l.hemiGround);
     this.hemi.intensity = l.hemiIntensity;
@@ -258,9 +326,35 @@ export class Environment {
     fog.color.copy(this.horizon);
     fog.near = l.fogNear;
     fog.far = l.fogFar;
-    this.cloudMat.emissive.set(l.cloud);
-    this.cloudMat.color.set(l.cloudColor);
+    (this.cloudMat.uniforms.uLit.value as THREE.Color).set(l.cloudColor);
+    (this.cloudMat.uniforms.uShade.value as THREE.Color).set(l.cloud);
     this.applyWeather();
+  }
+
+  /** Direction towards the sun (or moon) for the current time of day. */
+  /**
+   * Centres the shadow frustum on `centre`; it grows with height above ground so shadows stay
+   * visible from altitude. Snapped to texels to avoid shimmering.
+   */
+  updateShadow(centre: THREE.Vector3, heightAboveGround: number): void {
+    const range = THREE.MathUtils.clamp(120 + heightAboveGround * 1.1, 120, 900);
+    const cam = this.sun.shadow.camera;
+    if (Math.abs(cam.right - range) > range * 0.15) {
+      cam.left = -range;
+      cam.right = range;
+      cam.top = range;
+      cam.bottom = -range;
+      cam.updateProjectionMatrix();
+    }
+    const texel = (2 * cam.right) / this.sun.shadow.mapSize.x;
+    const snap = (v: number) => Math.round(v / texel) * texel;
+    this.sun.target.position.set(snap(centre.x), snap(centre.y), snap(centre.z));
+    this.sun.position.copy(this.sun.target.position).addScaledVector(LOOKS[this.time].sunDir, 2000);
+    this.sun.target.updateMatrixWorld();
+  }
+
+  get sunDirection(): THREE.Vector3 {
+    return LOOKS[this.time].sunDir;
   }
 
   setWeather(w: WeatherLook): void {
@@ -280,6 +374,7 @@ export class Environment {
     this.sun.intensity = l.sunIntensity * (1 - grey * 0.75);
     const fog = this.scene.fog as THREE.Fog;
     fog.color.copy(this.horizon);
+    waterSky.value.copy(this.horizon);
     fog.far = Math.min(l.fogFar, Math.max(1200, w.visibility));
     fog.near = Math.min(l.fogNear, fog.far * 0.3);
     this.clouds.count = PUFFS * Math.round(CLUSTERS * Math.max(0, Math.min(1, w.coverage)));

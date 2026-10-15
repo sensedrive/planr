@@ -23,7 +23,8 @@ import { CameraRig } from './view/cameras';
 import { Hud } from './view/hud';
 import { Vignette } from './view/vignette';
 import type { City } from './world/city';
-import { type Airfield, createAirfields, createTrees } from './world/runway';
+import { Forest } from './world/forest';
+import { type Airfield, createAirfields } from './world/runway';
 import { type Scenario, type ScenarioId, setScenario } from './world/scenario';
 import { createAlps } from './world/scenarios/alps';
 import { createFjord } from './world/scenarios/fjord';
@@ -36,6 +37,11 @@ import { createWater, surfaceHeight, Terrain, terrainHeight } from './world/terr
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+// filmic response: bright skies and sunlit faces roll off like a camera instead of clipping
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.toneMappingExposure = 1.05;
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.xr.enabled = true;
 renderer.xr.setReferenceSpaceType('local-floor');
@@ -50,6 +56,8 @@ const terrain = new Terrain();
 scene.add(terrain.group);
 const water = createWater();
 scene.add(water);
+const forest = new Forest();
+scene.add(forest.group);
 /** scenario-specific objects: airfields, trees, city, landmarks */
 const worldGroup = new THREE.Group();
 scene.add(worldGroup);
@@ -76,6 +84,9 @@ const variants: Record<AircraftId, Variant> = {
   jet: { type: JET, model: new JetModel(), cockpit: new Cockpit(makeLayout(JET), { ...JET.instruments, flapDegrees: JET.flapDegrees }) },
 };
 for (const v of Object.values(variants)) {
+  v.model.root.traverse((o) => {
+    if (o instanceof THREE.Mesh) o.castShadow = true;
+  });
   aircraftRoot.add(v.model.root, v.cockpit.group);
   v.model.root.visible = false;
   v.cockpit.group.visible = false;
@@ -118,8 +129,7 @@ async function useScenario(id: ScenarioId): Promise<void> {
   }
   airfields = createAirfields(s.airports, renderer.capabilities.getMaxAnisotropy());
   for (const a of airfields) worldGroup.add(a.group);
-  const trees = createTrees(s);
-  if (trees) worldGroup.add(trees);
+  forest.reset();
   city = id === 'nyc' && nyc ? nyc.city : null;
   if (city && nyc) worldGroup.add(city.group, nyc.landmarks);
   terrain.reset();
@@ -193,6 +203,7 @@ function applyLive(): void {
   cameraRig.seat = settings.seat;
   stickConfig.travel = settings.stick;
   env.setTime(settings.time);
+  terrain.setSun(env.sunDirection);
   for (const a of airfields) a.setNight(settings.time !== 'day');
   city?.setLights(settings.time === 'night' ? 1 : settings.time === 'evening' ? 0.55 : 0);
 }
@@ -227,6 +238,7 @@ async function startFlight(override?: Partial<Settings>): Promise<void> {
   aircraft.interpolate(1, aircraftRoot);
   terrain.update(aircraft.pos.x, aircraft.pos.z, Infinity);
   city?.update(aircraft.pos.x, aircraft.pos.z, Infinity);
+  forest.update(aircraft.pos.x, aircraft.pos.z, Infinity);
   started = true;
   paused = false;
   hintShown = false;
@@ -437,6 +449,9 @@ renderer.setAnimationLoop((time) => {
   terrain.update(pos.x, pos.z, xr ? 2 : 4);
   // in VR every frame is drawn twice: keep the city's far detail range shorter there
   city?.update(pos.x, pos.z, xr ? 2 : 3, xr ? 3600 : undefined);
+  forest.density = xr ? 0.6 : 1;
+  forest.update(pos.x, pos.z, xr ? 2 : 3);
+  env.updateShadow(pos, pos.y - surfaceHeight(pos.x, pos.z));
   env.update(dt, pos, aircraft.vel);
   water.position.set(Math.round(pos.x / 100) * 100, 0, Math.round(pos.z / 100) * 100);
   // drifting waves (texture offset in tiles; the plane snaps by whole tiles)
@@ -494,4 +509,25 @@ renderer.setAnimationLoop((time) => {
   renderer.render(scene, camera);
 });
 
-if (import.meta.env.DEV) Object.assign(window, { sim: { renderer, scene, camera, terrain, env, variants, aircraft, controls, actions, cameraRig, missions, settings, weather, OPTIONS } });
+/** Dev helper: put the aircraft somewhere, finish building the world around it and render one frame. */
+async function devView(x: number, y: number, z: number, headingDeg: number, mode: 'chase' | 'cockpit' = 'chase'): Promise<void> {
+  const h = (headingDeg * Math.PI) / 180;
+  aircraft.pos.set(x, y, z);
+  aircraft.quat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -h);
+  aircraft.vel.set(Math.sin(h) * 50, 0, -Math.cos(h) * 50);
+  aircraft.omega.set(0, 0, 0);
+  aircraft.crashed = false;
+  aircraft.interpolate(1, aircraftRoot);
+  aircraft.interpolate(1, aircraftRoot);
+  cameraRig.mode = mode;
+  for (let i = 0; i < 40; i++) cameraRig.update(0.1);
+  terrain.update(x, z, Infinity);
+  city?.update(x, z, Infinity);
+  forest.update(x, z, Infinity);
+  env.updateShadow(aircraftRoot.position, y - surfaceHeight(x, z));
+  env.update(0.5, aircraftRoot.position, aircraft.vel);
+  hud.setMessage('');
+  renderer.render(scene, camera);
+}
+
+if (import.meta.env.DEV) Object.assign(window, { sim: { devView, renderer, scene, camera, terrain, env, variants, aircraft, controls, actions, cameraRig, missions, settings, weather, OPTIONS } });

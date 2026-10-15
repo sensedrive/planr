@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { ControlState } from '../core/input';
 import { aileron, C172_AERO, elevator, rudder } from '../sim/aero';
 import type { Aircraft } from '../sim/aircraft';
+import { mergeChildMeshes } from './merge';
 
 const white = new THREE.MeshLambertMaterial({ color: 0xf2f1ec, flatShading: true });
 const red = new THREE.MeshLambertMaterial({ color: 0xb8322a, flatShading: true });
@@ -128,6 +129,8 @@ export class AircraftModel implements AircraftVisual {
     }
     this.root.add(rod(new THREE.Vector3(0, -0.4, -1.55), new THREE.Vector3(0, -1.0, -1.55), 0.04, dark));
     for (const s of [-1, 1]) this.root.add(rod(new THREE.Vector3(s * 0.5, -0.6, 0.25), new THREE.Vector3(s * 1.25, -1.0, 0.25), 0.04, dark));
+    mergeChildMeshes(this.fuselage);
+    mergeChildMeshes(this.root);
   }
 
   update(dt: number, c: ControlState, ac: Aircraft): void {

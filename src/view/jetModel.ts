@@ -3,6 +3,7 @@ import type { ControlState } from '../core/input';
 import { aileron, elevator, rudder } from '../sim/aero';
 import type { Aircraft } from '../sim/aircraft';
 import type { AircraftVisual } from './aircraftModel';
+import { mergeChildMeshes } from './merge';
 
 const body = new THREE.MeshLambertMaterial({ color: 0xdfe3e6, flatShading: true });
 /** wing panels are mirrored by negative scale, so render both sides */
@@ -164,6 +165,8 @@ export class JetModel implements AircraftVisual {
     leg(0, -3.2, 0.75, 'x', -Math.PI / 2);
     leg(-1.3, 0.35, 0.9, 'z', -Math.PI / 2);
     leg(1.3, 0.35, 0.9, 'z', Math.PI / 2);
+    mergeChildMeshes(this.fuselage);
+    mergeChildMeshes(this.root);
   }
 
   update(_dt: number, c: ControlState, ac: Aircraft): void {

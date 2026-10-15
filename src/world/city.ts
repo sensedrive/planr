@@ -183,6 +183,8 @@ export class City {
       const ids = job.level === 'near' ? t.ids : t.ids.filter((id) => this.buildings[id].roof - this.buildings[id].base > TALL);
       const mesh = new THREE.Mesh(this.geometry(ids), this.material);
       mesh.matrixAutoUpdate = false;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
       this.group.add(mesh);
       t[job.level] = mesh;
     }

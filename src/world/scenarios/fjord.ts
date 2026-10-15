@@ -57,7 +57,8 @@ function fjordHeight(x: number, z: number): number {
   if (reach > 0) {
     const v = Math.abs(channel(x, z)) / FJORD_WIDTH;
     if (v < 1) {
-      const wall = Math.pow(smooth(v, 0.5, 0.97), 0.75);
+      // steep lower walls rounding off into the shoulders; spread wide enough for the 19 m terrain grid
+      const wall = Math.pow(smooth(v, 0.38, 1.0), 0.85);
       const floor = -110;
       const carved = floor + (h - floor) * wall;
       h = h + (carved - h) * reach;
@@ -66,11 +67,11 @@ function fjordHeight(x: number, z: number): number {
   return h;
 }
 
-const C_ROCK = new THREE.Color(0x5f625f);
-const C_DARKROCK = new THREE.Color(0x45474a);
-const C_MEADOW = new THREE.Color(0x6a8f3e);
-const C_FOREST = new THREE.Color(0x24432a);
-const C_HEATH = new THREE.Color(0x7a7550);
+const C_ROCK = new THREE.Color(0x6b6d68);
+const C_DARKROCK = new THREE.Color(0x585a5a);
+const C_MEADOW = new THREE.Color(0x5f8a3a);
+const C_FOREST = new THREE.Color(0x26462b);
+const C_HEATH = new THREE.Color(0x6c7a48);
 const C_SNOW = new THREE.Color(0xeef2f5);
 
 function fjordColor(x: number, z: number, h: number, ny: number, out: THREE.Color): THREE.Color {
@@ -79,6 +80,8 @@ function fjordColor(x: number, z: number, h: number, ny: number, out: THREE.Colo
   out.lerp(C_FOREST, smooth(h + n * 40, 25, 90));
   out.lerp(C_HEATH, smooth(h + n * 60, 420, 560));
   out.lerp(C_ROCK, smooth(h + n * 80, 650, 800));
+  // bare rock on ridges and convex shoulders (higher frequency patches)
+  out.lerp(C_ROCK, smooth(noiseC(x * 0.002, z * 0.002) + h / 900, 0.75, 1.2) * 0.7);
   out.lerp(C_SNOW, smooth(h + n * 90, 880, 980) * smooth(ny, 0.6, 0.8));
   // cliffs
   out.lerp(C_DARKROCK, smooth(1 - ny, 0.3, 0.55));

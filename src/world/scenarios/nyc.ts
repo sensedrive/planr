@@ -273,7 +273,12 @@ function mergeByMaterial(g: THREE.Group): THREE.Group {
   out.name = 'landmarks';
   for (const [mat, geos] of byMat) {
     const merged = mergeGeometries(geos, false);
-    if (merged) out.add(new THREE.Mesh(merged, mat));
+    if (merged) {
+      const mesh = new THREE.Mesh(merged, mat);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      out.add(mesh);
+    }
   }
   if (segments.length) {
     const lg = new THREE.BufferGeometry();

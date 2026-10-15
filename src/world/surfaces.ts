@@ -68,22 +68,30 @@ export function applyTerrainDetail(mat: THREE.MeshLambertMaterial): void {
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uDetail = { value: tex };
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying highp vec3 vWPos;\nvarying vec3 vWNormal;')
+      .replace('#include <common>', '#include <common>\nattribute vec2 shade;\nvarying vec2 vShade;\nvarying highp vec3 vWPos;\nvarying vec3 vWNormal;')
       .replace(
         '#include <begin_vertex>',
-        '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvWNormal = normalize(mat3(modelMatrix) * objectNormal);',
+        '#include <begin_vertex>\nvShade = shade;\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvWNormal = normalize(mat3(modelMatrix) * objectNormal);',
       );
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform sampler2D uDetail;\nvarying highp vec3 vWPos;\nvarying vec3 vWNormal;')
+      .replace('#include <common>', '#include <common>\nuniform sampler2D uDetail;\nvarying vec2 vShade;\nvarying highp vec3 vWPos;\nvarying vec3 vWNormal;')
+      // baked shadows dim only the sun, ambient occlusion mostly the sky light
+      .replace(
+        '#include <lights_fragment_end>',
+        '#include <lights_fragment_end>\nreflectedLight.directDiffuse *= vShade.x * mix(1.0, vShade.y, 0.4);\nreflectedLight.indirectDiffuse *= vShade.y;',
+      )
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
         {
           vec3 n = abs(normalize(vWNormal));
-          vec3 w = pow(n, vec3(4.0));
+          vec3 w = pow(n, vec3(8.0));
           w /= (w.x + w.y + w.z);
-          float fine = texture2D(uDetail, vWPos.xz * 0.07).r * w.y + texture2D(uDetail, vWPos.zy * 0.07).r * w.x + texture2D(uDetail, vWPos.xy * 0.07).r * w.z;
-          float mid = texture2D(uDetail, vWPos.xz * 0.009 + 0.37).r * w.y + texture2D(uDetail, vWPos.zy * 0.009).r * w.x + texture2D(uDetail, vWPos.xy * 0.009).r * w.z;
+          // side projections are stretched horizontally: rock reads as layered strata, not dots
+          vec2 sx = vec2(vWPos.z * 0.018, vWPos.y * 0.11);
+          vec2 sz = vec2(vWPos.x * 0.018, vWPos.y * 0.11);
+          float fine = texture2D(uDetail, vWPos.xz * 0.07).r * w.y + texture2D(uDetail, sx).r * w.x + texture2D(uDetail, sz).r * w.z;
+          float mid = texture2D(uDetail, vWPos.xz * 0.009 + 0.37).r * w.y + texture2D(uDetail, sx * 0.25 + 0.5).r * w.x + texture2D(uDetail, sz * 0.25 + 0.5).r * w.z;
           float macro = texture2D(uDetail, vWPos.xz * 0.0011 + 0.71).r;
           // steep faces get stronger, streaky rock contrast
           float rockiness = 1.0 - n.y;
@@ -93,7 +101,7 @@ export function applyTerrainDetail(mat: THREE.MeshLambertMaterial): void {
         }`,
       );
   };
-  mat.customProgramCacheKey = () => 'terrain-detail-v1';
+  mat.customProgramCacheKey = () => 'terrain-detail-v2';
 }
 
 let waterNormals: THREE.DataTexture | null = null;
