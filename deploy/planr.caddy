@@ -1,0 +1,5 @@
+# --- planr (VR flight sim, see github.com/sensedrive/planr/deploy) ---
+planr.46-224-167-199.nip.io {
+	import common
+	reverse_proxy planr-web:80
+}

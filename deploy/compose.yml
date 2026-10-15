@@ -1,0 +1,13 @@
+# Static game container, reachable by the shared Caddy proxy on the beeryouup network.
+services:
+  planr-web:
+    build: ..
+    image: planr-web:latest
+    container_name: planr-web
+    restart: unless-stopped
+    networks: [proxy]
+
+networks:
+  proxy:
+    external: true
+    name: beeryouup_default

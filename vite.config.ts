@@ -1,0 +1,10 @@
+import basicSsl from '@vitejs/plugin-basic-ssl';
+import { defineConfig } from 'vite';
+
+// `npm run dev` serves plain HTTP on localhost (WebXR works there, also via `adb reverse`).
+// `npm run dev:quest` serves HTTPS on the LAN so the Quest browser can open it directly.
+export default defineConfig(({ mode }) => ({
+  plugins: mode === 'quest' ? [basicSsl()] : [],
+  server: { host: mode === 'quest', port: 5173 },
+  build: { target: 'es2022', chunkSizeWarningLimit: 1500 },
+}));
