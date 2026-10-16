@@ -4,6 +4,7 @@ export interface MenuHandlers {
   change(key: keyof Settings, value: string | number): void;
   fly(): void;
   resume(): void;
+  replay(): void;
 }
 
 /** Desktop start/pause menu (HTML overlay). */
@@ -11,6 +12,7 @@ export class Menu {
   readonly el: HTMLElement;
   private readonly rows = new Map<keyof Settings, HTMLButtonElement[]>();
   private readonly resumeBtn: HTMLButtonElement;
+  private readonly replayBtn: HTMLButtonElement;
   private readonly bestEl: HTMLElement;
 
   constructor(
@@ -53,15 +55,18 @@ export class Menu {
     this.resumeBtn = document.createElement('button');
     this.resumeBtn.textContent = 'Weiter';
     this.resumeBtn.addEventListener('click', () => this.handlers.resume());
+    this.replayBtn = document.createElement('button');
+    this.replayBtn.textContent = 'Wiederholung';
+    this.replayBtn.addEventListener('click', () => this.handlers.replay());
     const fly = document.createElement('button');
     fly.className = 'primary';
     fly.textContent = 'Fliegen';
     fly.addEventListener('click', () => this.handlers.fly());
-    footer.append(this.resumeBtn, fly);
+    footer.append(this.resumeBtn, this.replayBtn, fly);
     card.appendChild(footer);
     const hint = document.createElement('p');
     hint.className = 'hint';
-    hint.textContent = 'Esc öffnet das Menü · Quest 2: „Enter VR“ unten, Menü dort per Stick-Klick';
+    hint.textContent = 'Esc öffnet das Menü · J Wiederholung · Quest 2: „Enter VR“ unten, Menü dort per Stick-Klick';
     card.appendChild(hint);
 
     this.el.appendChild(card);
@@ -73,8 +78,9 @@ export class Menu {
     return this.el.style.display !== 'none';
   }
 
-  show(canResume: boolean, best: string): void {
+  show(canResume: boolean, best: string, canReplay = false): void {
     this.resumeBtn.style.display = canResume ? '' : 'none';
+    this.replayBtn.style.display = canReplay ? '' : 'none';
     this.bestEl.textContent = best;
     this.refresh();
     this.el.style.display = '';

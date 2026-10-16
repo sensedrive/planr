@@ -40,6 +40,11 @@ export interface Actions {
   cockpitSwitch(id: SwitchId): void;
   /** battery, fuel pump, ignition and starter in one go */
   autoStart(): void;
+  /**
+   * Starts or ends the replay. `offeredOnly`: only while one is being offered after a crash
+   * (the VR button doubles as flap lever otherwise). Returns whether it did anything.
+   */
+  toggleReplay(offeredOnly?: boolean): boolean;
 }
 
 export function createControlState(): ControlState {

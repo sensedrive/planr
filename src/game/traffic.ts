@@ -18,12 +18,19 @@ interface Waypoint {
   ground?: boolean;
   /** gear and landing light out from here on */
   approach?: boolean;
+  /** circuit leg flown toward this waypoint (for the radio calls) */
+  leg?: Leg;
 }
+
+/** Circuit legs and approach phases, as reported on the radio. */
+export type Leg = 'upwind' | 'crosswind' | 'downwind' | 'base' | 'final' | 'landing' | 'approach';
 
 interface Route {
   points: Waypoint[];
   /** start over at point `loopTo` after the last point; otherwise the aircraft is replaced */
   loopTo: number | null;
+  /** runway designator the route lands on ("24") */
+  runway?: string;
 }
 
 const G = 9.81;
@@ -45,10 +52,14 @@ class Traffic {
   slot: number | null = null;
   /** the airport whose runway the ground waypoints are on */
   airport: Airport | null = null;
+  /** radio callsign, written and spoken */
+  callsign = '';
+  spoken = '';
 
   constructor(
     readonly type: AircraftType,
     makeModel: ModelFactory,
+    readonly id: number,
   ) {
     this.ac.setType(type);
     this.model = makeModel ? makeModel(type) : null;
@@ -201,17 +212,18 @@ export function circuit(a: Airport, t: AircraftType, height: Height): Route | nu
   };
   return {
     points: [
-      { pos: p(-L / 2 + 50, 0, 0), speed: final, ground: true, approach: true },
-      { pos: p(-L / 2 + 350, 0, 0), speed: final * 1.05, ground: true },
-      { pos: p(L / 2 + 600, 0, h * 0.5), speed: pattern },
-      { pos: p(L / 2 + 900, off * 0.6, h), speed: pattern },
-      { pos: p(L / 2, off, h), speed: pattern },
-      { pos: p(-L / 2 - 600, off, h), speed: pattern, approach: true },
-      { pos: p(-L / 2 - 1300, off * 0.6, h * 0.65), speed: final * 1.15, approach: true },
-      { pos: p(-L / 2 - 1300, 0, h * 0.45), speed: final * 1.1, approach: true },
-      { pos: p(-L / 2 - 400, 0, 22), speed: final, approach: true },
+      { pos: p(-L / 2 + 50, 0, 0), speed: final, ground: true, approach: true, leg: 'final' },
+      { pos: p(-L / 2 + 350, 0, 0), speed: final * 1.05, ground: true, leg: 'landing' },
+      { pos: p(L / 2 + 600, 0, h * 0.5), speed: pattern, leg: 'upwind' },
+      { pos: p(L / 2 + 900, off * 0.6, h), speed: pattern, leg: 'crosswind' },
+      { pos: p(L / 2, off, h), speed: pattern, leg: 'downwind' },
+      { pos: p(-L / 2 - 600, off, h), speed: pattern, approach: true, leg: 'downwind' },
+      { pos: p(-L / 2 - 1300, off * 0.6, h * 0.65), speed: final * 1.15, approach: true, leg: 'base' },
+      { pos: p(-L / 2 - 1300, 0, h * 0.45), speed: final * 1.1, approach: true, leg: 'base' },
+      { pos: p(-L / 2 - 400, 0, 22), speed: final, approach: true, leg: 'final' },
     ],
     loopTo: 0,
+    runway: dir === 1 ? a.labelA : a.labelB,
   };
 }
 
@@ -222,13 +234,14 @@ function airlinerApproach(a: Airport, t: AircraftType): Route {
   return {
     points: [
       { pos: p(-L / 2 - 14000, 750), speed: t.approach * 1.35 },
-      { pos: p(-L / 2 - 9000, 480), speed: t.approach * 1.1, approach: true },
-      { pos: p(-L / 2 - 2000, 105), speed: t.approach, approach: true },
-      { pos: p(-L / 2 + 300, 0), speed: t.approach * 0.95, approach: true },
-      { pos: p(-L / 2 + 700, 0), speed: 35, ground: true, approach: true },
-      { pos: p(L / 2 - 200, 0), speed: 12, ground: true },
+      { pos: p(-L / 2 - 9000, 480), speed: t.approach * 1.1, approach: true, leg: 'approach' },
+      { pos: p(-L / 2 - 2000, 105), speed: t.approach, approach: true, leg: 'final' },
+      { pos: p(-L / 2 + 300, 0), speed: t.approach * 0.95, approach: true, leg: 'final' },
+      { pos: p(-L / 2 + 700, 0), speed: 35, ground: true, approach: true, leg: 'landing' },
+      { pos: p(L / 2 - 200, 0), speed: 12, ground: true, leg: 'landing' },
     ],
     loopTo: null,
+    runway: a.labelA,
   };
 }
 
@@ -260,6 +273,48 @@ export interface TrafficAdvisory {
   text: string;
   /** distance (m) */
   distance: number;
+  /** which AI aircraft */
+  id: number;
+  /** clock position relative to the player's nose, 1…12 */
+  clock: number;
+  /** height difference, rounded to 100 ft (positive = above the player) */
+  ft: number;
+  type: AircraftType;
+}
+
+/** What the radio needs to know about one AI aircraft. */
+export interface TrafficRadio {
+  id: number;
+  callsign: string;
+  /** callsign as it is spoken ("Delta Echo Kilo") */
+  spoken: string;
+  type: AircraftType;
+  airport: Airport | null;
+  runway: string;
+  leg: Leg | null;
+  pos: THREE.Vector3;
+  crossing: boolean;
+}
+
+const LETTERS = 'ABCDEFGHIKLMNOPRSTUVWXYZ';
+const ALPHABET: Record<string, string> = {
+  A: 'Alfa', B: 'Bravo', C: 'Charlie', D: 'Delta', E: 'Echo', F: 'Foxtrot', G: 'Golf', H: 'Hotel', I: 'India',
+  J: 'Juliett', K: 'Kilo', L: 'Lima', M: 'Mike', N: 'November', O: 'Oscar', P: 'Papa', Q: 'Quebec', R: 'Romeo',
+  S: 'Sierra', T: 'Tango', U: 'Uniform', V: 'Victor', W: 'Whiskey', X: 'X-Ray', Y: 'Yankee', Z: 'Zulu',
+};
+/** German radio digits: "zwo" so it is not mistaken for "drei" */
+const DIGITS = ['null', 'eins', 'zwo', 'drei', 'vier', 'fünf', 'sechs', 'sieben', 'acht', 'neun'];
+
+/** "D-EKLR" → "Delta Lima Romeo" (abbreviated: first letter and the last two). */
+export function spellCallsign(cs: string, full = false): string {
+  const letters = cs.replace(/[^A-Z]/g, '');
+  const use = full || letters.length <= 3 ? letters : letters[0] + letters.slice(-2);
+  return [...use].map((c) => ALPHABET[c] ?? c).join(' ');
+}
+
+/** "24" → "zwo vier", "421" → "vier zwo eins". */
+export function spellDigits(n: string | number): string {
+  return [...String(n)].map((c) => (c >= '0' && c <= '9' ? DIGITS[+c] : c)).join(' ');
 }
 
 const PATTERN_TYPES: AircraftId[] = ['c172', 'cub', 'pc12', 'baron'];
@@ -298,8 +353,34 @@ export class TrafficManager {
     return (this.seed - 1) / 2147483646;
   };
 
+  private nextId = 1;
+
+  /** Radio view of the AI aircraft. */
+  get radio(): TrafficRadio[] {
+    return this.fleet.map((t) => ({
+      id: t.id,
+      callsign: t.callsign,
+      spoken: t.spoken,
+      type: t.type,
+      airport: t.airport,
+      runway: t.route.runway ?? '',
+      leg: t.route.points[t.next]?.leg ?? null,
+      pos: t.ac.pos,
+      crossing: t.slot !== null,
+    }));
+  }
+
   private add(id: AircraftId): Traffic {
-    const tr = new Traffic(AIRCRAFT[id], this.makeModel);
+    const tr = new Traffic(AIRCRAFT[id], this.makeModel, this.nextId++);
+    if (id === 'a320') {
+      const n = 100 + Math.floor(this.rnd() * 900);
+      tr.callsign = `DLH ${n}`;
+      tr.spoken = `Lufthansa ${spellDigits(n)}`;
+    } else {
+      const l = () => LETTERS[Math.floor(this.rnd() * LETTERS.length)];
+      tr.callsign = `D-${id === 'pc12' || id === 'baron' || id === 'jet' ? 'I' : 'E'}${l()}${l()}${l()}`;
+      tr.spoken = spellCallsign(tr.callsign);
+    }
     this.fleet.push(tr);
     if (tr.model) this.group.add(tr.model.root);
     return tr;
@@ -388,13 +469,13 @@ export class TrafficManager {
       const dy = tr.ac.pos.y - player.pos.y;
       if (d < 2500 && Math.abs(dy) < 300 && d < best) {
         best = d;
-        this.advisory = { text: this.describe(player, tr, d, dy), distance: d };
+        this.advisory = this.describe(player, tr, d, dy);
       }
     }
   }
 
   /** "Verkehr 2 Uhr, 1,2 km, 300 ft höher" */
-  private describe(player: Aircraft, tr: Traffic, d: number, dy: number): string {
+  private describe(player: Aircraft, tr: Traffic, d: number, dy: number): TrafficAdvisory {
     const p = player.pos;
     const bearing = Math.atan2(tr.ac.pos.x - p.x, -(tr.ac.pos.z - p.z)) / DEG;
     let clock = Math.round((((bearing - player.headingDeg) % 360) + 360) % 360 / 30);
@@ -402,7 +483,7 @@ export class TrafficManager {
     const ft = Math.round((dy * 3.28084) / 100) * 100;
     const level = Math.abs(ft) < 200 ? 'gleiche Höhe' : `${Math.abs(ft)} ft ${ft > 0 ? 'höher' : 'tiefer'}`;
     const dist = d < 1000 ? `${Math.round(d / 50) * 50} m` : `${(d / 1000).toFixed(1).replace('.', ',')} km`;
-    return `Verkehr ${clock} Uhr, ${dist}, ${level} (${tr.type.short})`;
+    return { text: `Verkehr ${clock} Uhr, ${dist}, ${level} (${tr.type.short})`, distance: d, id: tr.id, clock, ft, type: tr.type };
   }
 
   /** The player flew into another aircraft? */

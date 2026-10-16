@@ -13,6 +13,7 @@ const LABELS: Record<SwitchId, string> = {
   landing: 'LANDE',
   panel: 'PANEL',
   parkBrake: 'P-BREMS',
+  com: 'COM',
   ap: 'AP',
   apHdg: 'HDG',
   apAlt: 'ALT',
@@ -31,7 +32,7 @@ const PX_H = 168;
 
 /**
  * Two rows of lit push switches below the instruments: electrics, engine start and
- * lights on top, autopilot with heading/altitude selector and a fuel readout below.
+ * lights on top, autopilot with heading/altitude selector, the COM radio and a fuel readout below.
  * One canvas texture; invisible boxes take the presses (finger in VR, mouse on desktop).
  */
 export class SwitchPanel {
@@ -64,8 +65,10 @@ export class SwitchPanel {
     const cellW = PX_W / 10;
     const rowH = PX_H / 2;
     switches.forEach((id, i) => this.cells.push({ id, x: i * cellW, y: 0, w: cellW }));
-    if (autopilot) AP_ROW.forEach((id, i) => this.cells.push({ id, x: i * cellW, y: rowH, w: cellW }));
-    Object.assign(this.readout, { x: (autopilot ? AP_ROW.length : 0) * cellW, y: rowH, w: PX_W - (autopilot ? AP_ROW.length : 0) * cellW });
+    // lower row: autopilot (not in the glider), then the radio, then the readout
+    const lower: SwitchId[] = [...(autopilot ? AP_ROW : []), 'com'];
+    lower.forEach((id, i) => this.cells.push({ id, x: i * cellW, y: rowH, w: cellW }));
+    Object.assign(this.readout, { x: lower.length * cellW, y: rowH, w: PX_W - lower.length * cellW });
 
     // press targets, slightly proud of the panel
     const s = width / PX_W;
@@ -118,12 +121,12 @@ export class SwitchPanel {
     ctx.fillRect(r.x + 8, r.y + 8, r.w - 16, rowH - 16);
     ctx.fillStyle = '#8ff0a4';
     ctx.textAlign = 'left';
-    ctx.font = 'bold 26px ui-monospace, Menlo, monospace';
+    ctx.font = `bold ${r.w < 260 ? 21 : 26}px ui-monospace, Menlo, monospace`;
     const lines: string[] = [];
     if (this.cells.some((c) => c.id === 'ap'))
       lines.push(sys.ap.on ? `${String(sys.ap.heading).padStart(3, '0')}° ${sys.ap.altitudeFt}ft` : 'AP AUS');
     lines.push(fuel >= 0 ? `FUEL ${fuel}%` : 'KEIN MOTOR');
-    lines.forEach((l, i) => ctx.fillText(l, r.x + 20, r.y + rowH / 2 + (i - (lines.length - 1) / 2) * 30));
+    lines.forEach((l, i) => ctx.fillText(l, r.x + (r.w < 260 ? 14 : 20), r.y + rowH / 2 + (i - (lines.length - 1) / 2) * 30));
     this.tex.needsUpdate = true;
   }
 }

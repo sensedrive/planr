@@ -27,6 +27,7 @@ export class VRMenu {
   private hits: Hit[] = [];
   private hover: Hit | null = null;
   private canResume = false;
+  private canReplay = false;
   private best = '';
   private readonly raycaster = new THREE.Raycaster();
   private readonly m = new THREE.Matrix4();
@@ -74,7 +75,8 @@ export class VRMenu {
     return this.panel.visible;
   }
 
-  show(canResume: boolean, best: string, eye: THREE.Vector3): void {
+  show(canResume: boolean, best: string, eye: THREE.Vector3, canReplay = false): void {
+    this.canReplay = canReplay;
     this.panel.position.set(eye.x, eye.y - 0.08, eye.z - 0.55);
     this.canResume = canResume;
     this.best = best;
@@ -182,7 +184,8 @@ export class VRMenu {
     ctx.font = '24px sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText(this.best, 40, fy + 6);
-    if (this.canResume) this.button(40, fy + 30, 300, 90, 'Weiter', false, () => this.handlers.resume());
+    if (this.canResume) this.button(40, fy + 30, 220, 90, 'Weiter', false, () => this.handlers.resume());
+    if (this.canReplay) this.button(275, fy + 30, 250, 90, 'Wiederholung', false, () => this.handlers.replay());
     this.button(W - 40 - 420, fy + 30, 420, 90, 'Fliegen', false, () => this.handlers.fly(), true);
     this.texture.needsUpdate = true;
   }

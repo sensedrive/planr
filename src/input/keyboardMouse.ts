@@ -71,6 +71,12 @@ export class KeyboardInput {
       case 'KeyK':
         this.actions.autoStart();
         break;
+      case 'KeyT':
+        this.actions.cockpitSwitch('com');
+        break;
+      case 'KeyJ':
+        this.actions.toggleReplay();
+        break;
       case 'Escape':
         this.actions.toggleMenu();
         break;

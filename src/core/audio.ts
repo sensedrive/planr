@@ -61,6 +61,9 @@ export class FlightAudio {
   private motorGain!: GainNode;
   private hornGain!: GainNode;
   private noise!: AudioBuffer;
+  /** headset radio: band-passed like a COM receiver, not muffled by the cabin */
+  private radioBus!: BiquadFilterNode;
+  private radioHiss!: GainNode;
 
   /** Must be called from a user gesture. */
   start(): void {
@@ -143,6 +146,26 @@ export class FlightAudio {
     horn.connect(hf).connect(this.hornGain).connect(this.master);
     horn.start();
 
+    // radio: everything through a 300–3000 Hz band-pass with a little drive, hiss while the squelch is open
+    const lo = ctx.createBiquadFilter();
+    lo.type = 'highpass';
+    lo.frequency.value = 350;
+    this.radioBus = ctx.createBiquadFilter();
+    this.radioBus.type = 'lowpass';
+    this.radioBus.frequency.value = 2800;
+    this.radioBus.connect(lo).connect(this.master);
+    const hiss = ctx.createBufferSource();
+    hiss.buffer = this.noise;
+    hiss.loop = true;
+    const hf2 = ctx.createBiquadFilter();
+    hf2.type = 'bandpass';
+    hf2.frequency.value = 1700;
+    hf2.Q.value = 0.6;
+    this.radioHiss = ctx.createGain();
+    this.radioHiss.gain.value = 0;
+    hiss.connect(hf2).connect(this.radioHiss).connect(this.radioBus);
+    hiss.start();
+
     void this.loadSamples(ctx);
   }
 
@@ -198,7 +221,54 @@ export class FlightAudio {
     if (this.ctx) this.master.gain.setTargetAtTime(this.muted ? 0 : 0.8, this.ctx.currentTime, 0.05);
   }
 
-  /** A short thump (and tyre chirp when fast); `fpm` = sink rate at touchdown. */
+  /** Squelch opening (`open`) or closing: a burst of static, and the carrier hiss under the voice. */
+  radioKey(open: boolean): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    const g = ctx.createGain();
+    const dur = open ? 0.09 : 0.22;
+    g.gain.setValueAtTime(open ? 0.22 : 0.3, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(g).connect(this.radioBus);
+    src.start(t, Math.random());
+    src.stop(t + dur + 0.05);
+    this.radioHiss.gain.setTargetAtTime(open ? 0.045 : 0, t + (open ? 0.05 : 0), 0.03);
+  }
+
+  /**
+   * Voice-like babble through the radio band (syllables of a buzzing formant),
+   * for browsers without speech synthesis. `pitch` ~1 tower, lower/higher for other stations.
+   */
+  radioBabble(seconds: number, pitch: number): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t0 = ctx.currentTime + 0.08;
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    const formant = ctx.createBiquadFilter();
+    formant.type = 'bandpass';
+    formant.Q.value = 3;
+    const g = ctx.createGain();
+    g.gain.value = 0;
+    osc.connect(formant).connect(g).connect(this.radioBus);
+    let t = t0;
+    while (t < t0 + seconds) {
+      const syl = 0.09 + Math.random() * 0.12;
+      osc.frequency.setValueAtTime(110 * pitch * (0.85 + Math.random() * 0.3), t);
+      formant.frequency.setValueAtTime(500 + Math.random() * 1500, t);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.16, t + syl * 0.3);
+      g.gain.linearRampToValueAtTime(0.0001, t + syl);
+      // short pauses between words
+      t += syl + (Math.random() < 0.25 ? 0.12 : 0.02);
+    }
+    osc.start(t0);
+    osc.stop(t + 0.05);
+  }
+
   /** Switch click in the cockpit. */
   click(): void {
     const ctx = this.ctx;
@@ -218,6 +288,7 @@ export class FlightAudio {
     src.stop(t + 0.06);
   }
 
+  /** A short thump (and tyre chirp when fast); `fpm` = sink rate at touchdown. */
   touchdown(fpm: number, speed: number): void {
     const ctx = this.ctx;
     if (!ctx) return;
