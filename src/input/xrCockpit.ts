@@ -35,6 +35,8 @@ const tmpDelta = new THREE.Vector3();
 export class XRCockpitInput {
   /** false while the menu is open: no grabbing, controller buttons only toggle the menu */
   enabled = true;
+  /** a replay is playing: the right controller's A/B drive it */
+  replaying = false;
   private readonly hands: Hand[] = [];
   private stallPulse = 0;
   private controls: ControlState = createControlState();
@@ -213,6 +215,15 @@ export class XRCockpitInput {
       const sx = deadzone(gp.axes[2] ?? 0, 0.15);
       const sy = deadzone(gp.axes[3] ?? 0, 0.15);
       if (edge(3)) this.actions.toggleMenu();
+      if (this.replaying) {
+        // replay: A changes the camera, B ends it
+        if (hand.source?.handedness === 'right') {
+          if (edge(4)) this.actions.toggleCamera();
+          if (edge(5)) this.actions.toggleReplay();
+        }
+        hand.prev = pressed;
+        continue;
+      }
       if (!this.enabled) {
         hand.prev = pressed;
         continue;
@@ -226,7 +237,7 @@ export class XRCockpitInput {
       } else {
         c.trim = clamp(c.trim + sy * 0.35 * dt);
         if (edge(4)) this.actions.reset(false);
-        if (edge(5)) stepFlaps(c, 1);
+        if (edge(5) && !this.actions.toggleReplay(true)) stepFlaps(c, 1);
       }
       hand.prev = pressed;
     }

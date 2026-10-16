@@ -14,6 +14,7 @@ export type SwitchId =
   | 'landing'
   | 'panel'
   | 'parkBrake'
+  | 'com'
   | 'ap'
   | 'apHdg'
   | 'apAlt'
@@ -58,6 +59,8 @@ export class Systems {
   landing = false;
   panel = false;
   parkBrake = false;
+  /** COM radio (tower and traffic calls); needs the battery */
+  com = true;
   /** kg */
   fuel = 0;
   capacity = 0;
@@ -91,6 +94,7 @@ export class Systems {
     this.landing = false;
     this.panel = false;
     this.parkBrake = !running;
+    this.com = running || type.glider;
     this.cranking = 0;
     this.ap.on = false;
     this.notice = '';
@@ -241,6 +245,11 @@ export class Systems {
     c.pitch = clamp((this.apPitch - ac.pitchDeg) * 0.12 - ac.omega.x * DEG * 0.012);
     this.apOut.pitch = c.pitch;
     this.apOut.roll = c.roll;
+  }
+
+  /** Is the radio receiving? */
+  get radioOn(): boolean {
+    return this.com && this.battery;
   }
 
   /** The gear can only move with electric (hydraulic pump) power. */

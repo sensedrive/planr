@@ -6,6 +6,8 @@ export class Hud {
   private readonly hud = document.getElementById('hud')!;
   private readonly help = document.getElementById('help')!;
   private readonly message = document.getElementById('message')!;
+  private readonly radio = document.getElementById('radio')!;
+  private lastRadio = '';
   private timer = 0;
   private lastMessage = '';
 
@@ -19,6 +21,14 @@ export class Hud {
     this.lastMessage = html;
     this.message.innerHTML = html;
     this.message.style.display = html ? 'block' : 'none';
+  }
+
+  /** Radio caption at the top ("TWR: …"), empty hides it. */
+  setRadio(text: string): void {
+    if (text === this.lastRadio) return;
+    this.lastRadio = text;
+    this.radio.textContent = text ? `📻 ${text}` : '';
+    this.radio.style.display = text ? 'block' : 'none';
   }
 
   update(dt: number, ac: Aircraft, c: ControlState, fps: number, wind: string, status: string): void {

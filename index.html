@@ -53,6 +53,25 @@
       #menu .best { color: #9aa7b5; font-size: 13px; min-height: 1em; margin: 10px 0 0; }
       #menu .hint { color: #6f7c8a; font-size: 12px; margin: 10px 0 0; }
       #VRButton { z-index: 20 !important; }
+      #radio {
+        position: fixed; top: 12px; left: 50%; transform: translateX(-50%); max-width: min(720px, calc(100% - 440px)); padding: 7px 14px;
+        border-radius: 8px; background: rgba(10, 16, 24, 0.6); color: #bdf5c8; font: 14px/1.4 ui-monospace, Menlo, monospace;
+        pointer-events: none; display: none; text-align: center;
+      }
+      #replay-offer, #replay-bar button {
+        border: 0; border-radius: 9px; cursor: pointer; background: #252b33; color: #fff; font: 14px ui-sans-serif, system-ui, sans-serif; padding: 9px 12px;
+      }
+      #replay-offer {
+        position: fixed; bottom: 72px; left: 50%; transform: translateX(-50%); background: #ff9a2a; color: #1a1206; font-weight: 700;
+        font-size: 16px; padding: 12px 20px; z-index: 5;
+      }
+      #replay-bar {
+        position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+        justify-content: center; padding: 8px 10px; border-radius: 12px; background: rgba(10, 16, 24, 0.72); z-index: 5; max-width: calc(100% - 32px);
+      }
+      #replay-bar .caption { color: #fff; font: 14px ui-monospace, Menlo, monospace; padding: 0 8px; }
+      #replay-bar button:hover, #replay-offer:hover { filter: brightness(1.2); }
+      body.xr #radio, body.xr #replay-offer, body.xr #replay-bar, body.replaying #help, body.replaying #hud { display: none !important; }
     </style>
   </head>
   <body>
@@ -61,10 +80,11 @@
       <b>Steuerung</b><br />
       <kbd>W</kbd>/<kbd>S</kbd> drücken/ziehen · <kbd>A</kbd>/<kbd>D</kbd> rollen · <kbd>Q</kbd>/<kbd>E</kbd> Seitenruder<br />
       <kbd>Shift</kbd>/<kbd>X</kbd> oder Mausrad Gas · <kbd>B</kbd> Bremse · <kbd>F</kbd>/<kbd>V</kbd> Klappen · <kbd>G</kbd> Fahrwerk · <kbd>,</kbd>/<kbd>.</kbd> Trimmung<br />
-      Cockpit: Hebel, Trimmräder, Schalter anklicken (links +, rechts −) · <kbd>K</kbd> anlassen · <kbd>O</kbd> Autopilot · <kbd>N</kbd> Landelicht<br />
-      <kbd>C</kbd> Kamera · Maus ziehen umsehen · <kbd>R</kbd> Neustart · <kbd>L</kbd> Luftstart · <kbd>P</kbd> Pause · <kbd>M</kbd> Ton · <kbd>H</kbd> Hilfe · <kbd>Esc</kbd> Menü
+      Cockpit: Hebel, Trimmräder, Schalter anklicken (links +, rechts −) · <kbd>K</kbd> anlassen · <kbd>O</kbd> Autopilot · <kbd>N</kbd> Landelicht · <kbd>T</kbd> Funk<br />
+      <kbd>C</kbd> Kamera · Maus ziehen umsehen · <kbd>R</kbd> Neustart · <kbd>L</kbd> Luftstart · <kbd>J</kbd> Wiederholung · <kbd>P</kbd> Pause · <kbd>M</kbd> Ton · <kbd>H</kbd> Hilfe · <kbd>Esc</kbd> Menü
     </div>
     <div id="message"></div>
+    <div id="radio"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

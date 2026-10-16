@@ -8,6 +8,10 @@ import { AIRCRAFT, type AircraftId, type AircraftType } from './sim/types';
 import { switchesFor } from './sim/systems';
 import { FlightAudio } from './core/audio';
 import { type Actions, clamp, createControlState } from './core/input';
+import { RadioOperator } from './core/radioVoice';
+import { createFrame, FlightRecorder, LIGHT } from './game/replay';
+import { ReplayBar } from './ui/replayBar';
+import { ReplayView } from './view/replayView';
 import { FixedStepLoop } from './core/loop';
 import { Missions } from './game/missions';
 import { bestKey, choiceAvailable, loadBest, loadSettings, OPTIONS, saveSettings, type Settings } from './game/settings';
@@ -27,7 +31,7 @@ import { TrafficManager } from './game/traffic';
 import type { City } from './world/city';
 import { Forest } from './world/forest';
 import { type Airfield, createAirfields } from './world/runway';
-import { type Scenario, type ScenarioId, setScenario } from './world/scenario';
+import { type Scenario, type ScenarioId, scenario, setScenario } from './world/scenario';
 import { createAlps } from './world/scenarios/alps';
 import { createFjord } from './world/scenarios/fjord';
 import { loadNyc, type NycWorld } from './world/scenarios/nyc';
@@ -118,6 +122,18 @@ const vignette = new Vignette(camera);
 const feel = new FlightFeel();
 cameraRig.feel = feel;
 const settings: Settings = loadSettings();
+const radio = new RadioOperator(audio);
+/** the last three minutes of the flight at 20 Hz, for the replay */
+const recorder = new FlightRecorder(20, 180);
+const recFrame = createFrame();
+const replay = new ReplayView(recorder, camera, scene, aircraftRoot, cameraRig, surfaceHeight, renderer.domElement);
+/** flight time (s): advances only while flying, the recorder's clock */
+let flightTime = 0;
+let crashRecorded = false;
+/** flight time of the last touchdown (a replay is offered for a while after it) */
+let landedAt = -Infinity;
+/** inputs nobody flies with while a replay plays (keys, pads and VR still get read) */
+const idleControls = createControlState();
 
 let started = false;
 let menuOpen = true;
@@ -244,7 +260,13 @@ async function startFlight(override?: Partial<Settings>): Promise<void> {
     }
   }
   useAircraft(settings.aircraft);
+  endReplay();
   missions.start({ ...settings, ...override }, controls);
+  recorder.clear();
+  flightTime = 0;
+  crashRecorded = false;
+  landedAt = -Infinity;
+  radio.reset(settings.aircraft);
   traffic.start({ off: 0, normal: 1, busy: 2 }[settings.traffic], aircraft.pos);
   if (settings.sky === 'live') {
     if (!metar) await metarPromise;
@@ -280,41 +302,112 @@ const handlers: MenuHandlers = {
   },
   fly: () => void startFlight(),
   resume: () => closeMenu(),
+  replay: () => void startReplay(),
 };
 
 const menu = new Menu(settings, handlers);
 
 function openMenu(): void {
+  endReplay();
   menuOpen = true;
   xrInput.release();
   xrInput.enabled = false;
-  if (renderer.xr.isPresenting) vrMenu.show(started, bestText(), current.type.eye);
-  else menu.show(started, bestText());
+  if (renderer.xr.isPresenting) vrMenu.show(started, bestText(), current.type.eye, started && replay.available);
+  else menu.show(started, bestText(), started && replay.available);
 }
 
 function closeMenu(): void {
   menuOpen = false;
   menu.hide();
   vrMenu.hide();
-  xrInput.enabled = true;
+  xrInput.enabled = !replay.active;
+}
+
+/** A replay is offered after a crash and for a while after touching down. */
+function replayOffered(): boolean {
+  return started && !menuOpen && replay.available && (aircraft.crashed || (aircraft.onGround && flightTime - landedAt < 40));
+}
+
+function startReplay(): boolean {
+  if (!started || replay.active) return false;
+  if (!replay.start(current.type, scenario().airports, renderer.xr.isPresenting)) return false;
+  if (menuOpen) closeMenu();
+  xrInput.release();
+  xrInput.enabled = false;
+  xrInput.replaying = true;
+  // the AI traffic is not recorded: hide it rather than show it frozen
+  traffic.group.visible = false;
+  radio.silence();
+  document.body.classList.add('replaying');
+  return true;
+}
+
+function endReplay(): void {
+  if (!replay.active) return;
+  replay.stop();
+  xrInput.replaying = false;
+  xrInput.enabled = !menuOpen;
+  traffic.group.visible = true;
+  document.body.classList.remove('replaying');
+  // back to the live aircraft
+  aircraft.interpolate(1, aircraftRoot);
+}
+
+/** Stores the current (interpolated) pose and visuals in the flight recorder. */
+function recordFrame(): void {
+  const f = recFrame;
+  const s = aircraft.systems;
+  f.t = flightTime;
+  f.pos.copy(aircraftRoot.position);
+  f.quat.copy(aircraftRoot.quaternion);
+  f.pitch = controls.pitch;
+  f.roll = controls.roll;
+  f.yaw = controls.yaw;
+  f.throttle = controls.throttle;
+  f.flaps = aircraft.flaps;
+  f.gear = aircraft.gear;
+  f.rpm = aircraft.engine.rpm;
+  f.spool = aircraft.engine.spool;
+  f.airspeed = aircraft.aero.airspeed;
+  f.gLoad = aircraft.aero.force.y / (aircraft.type.mass * 9.81);
+  f.onGround = aircraft.onGround;
+  f.engineRunning = aircraft.engine.running;
+  f.reheat = !!(aircraft.engine as { reheat?: boolean }).reheat;
+  f.lights =
+    (s.battery ? LIGHT.power : 0) | (s.nav ? LIGHT.nav : 0) | (s.strobe ? LIGHT.strobe : 0) | (s.beacon ? LIGHT.beacon : 0) | (s.landing ? LIGHT.landing : 0);
+  if (!aircraft.crashed) recorder.record(f);
+  else if (!crashRecorded) {
+    // the moment of the crash, then nothing moves any more
+    recorder.record(f, true);
+    crashRecorded = true;
+  }
 }
 
 const actions: Actions = {
   reset: (airStart = false) => void startFlight(airStart ? { mission: 'airstart' } : undefined),
-  toggleCamera: () => cameraRig.toggle(),
+  toggleCamera: () => (replay.active ? replay.cycleCamera() : cameraRig.toggle()),
   recenter: () => cameraRig.recenter(),
-  togglePause: () => (paused = !paused),
+  togglePause: () => (replay.active ? replay.togglePause() : (paused = !paused)),
   toggleMute: () => audio.toggleMute(),
   toggleHelp: () => hud.toggleHelp(),
-  toggleMenu: () => (menuOpen ? started && closeMenu() : openMenu()),
+  // Esc / stick click during a replay ends it first
+  toggleMenu: () => (replay.active && !renderer.xr.isPresenting ? endReplay() : menuOpen ? started && closeMenu() : openMenu()),
+  toggleReplay: (offeredOnly = false) => {
+    if (replay.active) {
+      endReplay();
+      return true;
+    }
+    if (offeredOnly && !(started && aircraft.crashed)) return false;
+    return startReplay();
+  },
   cockpitSwitch: (id) => {
-    if (!started || menuOpen) return;
+    if (!started || menuOpen || replay.active) return;
     aircraft.systems.toggle(id, aircraft);
     audio.click();
   },
   autoStart: () => {
     const s = aircraft.systems;
-    if (!started || menuOpen || aircraft.engine.running || current.type.glider) return;
+    if (!started || menuOpen || replay.active || aircraft.engine.running || current.type.glider) return;
     for (const id of ['battery', 'fuelPump', 'ignition', 'beacon'] as const) if (!s[id]) s.toggle(id, aircraft);
     s.toggle('starter', aircraft);
     audio.click();
@@ -343,12 +436,36 @@ const cockpitMouse = new CockpitMouse(
 let hintText = '';
 let hintUntil = 0;
 
-for (const ev of ['pointerdown', 'keydown'] as const) window.addEventListener(ev, () => audio.start());
+const replayBar = new ReplayBar({
+  start: () => void startReplay(),
+  stop: () => endReplay(),
+  camera: () => replay.cycleCamera(),
+  pause: () => replay.togglePause(),
+  seek: (s) => replay.seek(s),
+  speed: (d) => replay.changeSpeed(d),
+});
+// replay transport keys (the flight keys are not read while it plays)
+window.addEventListener('keydown', (e) => {
+  if (!replay.active || e.repeat) return;
+  if (e.code === 'ArrowLeft') replay.seek(-5);
+  else if (e.code === 'ArrowRight') replay.seek(5);
+  else if (e.code === 'ArrowUp') replay.changeSpeed(1);
+  else if (e.code === 'ArrowDown') replay.changeSpeed(-1);
+  else if (e.code === 'Space') replay.togglePause();
+});
+
+for (const ev of ['pointerdown', 'keydown'] as const)
+  window.addEventListener(ev, () => {
+    audio.start();
+    radio.prime();
+  });
 
 renderer.xr.addEventListener('sessionstart', () => {
   document.body.classList.add('xr');
+  endReplay();
   cameraRig.onXRStart();
   audio.start();
+  radio.prime();
   xrStartTime = performance.now();
   hintShown = false;
   if (menuOpen) {
@@ -357,6 +474,7 @@ renderer.xr.addEventListener('sessionstart', () => {
   }
 });
 renderer.xr.addEventListener('sessionend', () => {
+  endReplay();
   document.body.classList.remove('xr');
   cameraRig.onXREnd();
   xrInput.release();
@@ -382,6 +500,7 @@ await useScenario(settings.scenario === 'nyc' ? 'alps' : settings.scenario);
 applyLive();
 useAircraft(settings.aircraft);
 missions.start({ ...settings, scenario: activeScenario! }, controls);
+radio.reset(settings.aircraft);
 aircraft.interpolate(1, aircraftRoot);
 terrain.update(aircraft.pos.x, aircraft.pos.z, Infinity);
 menu.show(false, bestText());
@@ -403,18 +522,20 @@ renderer.setAnimationLoop((time) => {
   const dt = Math.min(timer.getDelta(), 0.1);
   fps += (1 / Math.max(dt, 1e-3) - fps) * 0.05;
   const xr = renderer.xr.isPresenting;
-  const running = started && !menuOpen && !paused;
+  const replaying = replay.active;
+  const running = started && !menuOpen && !paused && !replaying;
+  const input = replaying ? idleControls : controls;
 
-  controls.brake = 0;
+  input.brake = 0;
   if (xr) {
-    xrInput.update(dt, controls, aircraft.stallWarning, feel.rumble);
+    xrInput.update(dt, input, aircraft.stallWarning, feel.rumble);
     vrMenu.update();
   } else {
-    keyboard.update(dt, controls);
-    const pad = gamepad.update(dt, controls);
-    controls.pitch = pad?.pitch ?? keyboard.pitch;
-    controls.roll = pad?.roll ?? keyboard.roll;
-    controls.yaw = pad?.yaw ?? keyboard.yaw;
+    keyboard.update(dt, input);
+    const pad = gamepad.update(dt, input);
+    input.pitch = pad?.pitch ?? keyboard.pitch;
+    input.roll = pad?.roll ?? keyboard.roll;
+    input.yaw = pad?.yaw ?? keyboard.yaw;
   }
 
   if (running) {
@@ -433,59 +554,79 @@ renderer.setAnimationLoop((time) => {
     hintUntil = performance.now() + 2500;
     aircraft.systems.notice = '';
   }
-  if (aircraft.touchdown && !lastTouchdown) audio.touchdown(aircraft.touchdown.vsFpm, aircraft.touchdown.airspeedKt / 1.944);
+  if (aircraft.touchdown && !lastTouchdown) {
+    audio.touchdown(aircraft.touchdown.vsFpm, aircraft.touchdown.airspeedKt / 1.944);
+    landedAt = flightTime;
+  }
   lastTouchdown = aircraft.touchdown;
   // gear or flaps travelling → electric motor sound
   const motors = Math.abs(aircraft.flaps - controls.flaps) > 0.01 || (aircraft.gear > 0.01 && aircraft.gear < 0.99);
-  aircraft.interpolate(alpha, aircraftRoot);
+  if (replaying) replay.update(dt);
+  else aircraft.interpolate(alpha, aircraftRoot);
+  if (running) {
+    flightTime += dt;
+    recordFrame();
+  }
   const pos = aircraftRoot.position;
+  /** what the model, cockpit and sound show: the live aircraft, or the replay's ghost */
+  const shown = replaying ? replay.ghost : aircraft;
+  const shownControls = replaying ? replay.controls : controls;
 
-  model().update(running ? dt : 0, controls, aircraft);
-  const inCockpit = cameraRig.inCockpit;
+  if (running && !aircraft.crashed) {
+    const ground = surfaceHeight(aircraft.pos.x, aircraft.pos.z);
+    radio.update(
+      dt,
+      { player: aircraft, airports: scenario().airports, traffic: traffic.radio, advisory: traffic.advisory, windFrom: weather.fromDeg, windKt: weather.speedKt, ground },
+      aircraft.systems.radioOn,
+    );
+  } else radio.silence();
+
+  model().update(running || (replaying && !replay.paused) ? dt : 0, shownControls, shown);
+  const inCockpit = replaying ? replay.inCockpit : cameraRig.inCockpit;
   model().fuselage.visible = !inCockpit;
   cockpit().group.visible = inCockpit;
-  cockpitMouse.enabled = inCockpit && !xr && !menuOpen;
+  cockpitMouse.enabled = inCockpit && !xr && !menuOpen && !replaying;
   const windStr = windText();
   if (inCockpit) {
     cockpit().update(
       dt,
-      controls,
-      aircraft.gear,
+      shownControls,
+      shown.gear,
       {
-        airspeedKt: aircraft.airspeedKt,
-        altitudeFt: aircraft.altitudeFt,
-        vsFpm: aircraft.verticalSpeedFpm,
-        pitchDeg: aircraft.pitchDeg,
-        rollDeg: aircraft.rollDeg,
-        headingDeg: aircraft.headingDeg,
-        rpm: aircraft.engine.rpm,
-        throttle: controls.throttle,
-        flapsTarget: controls.flaps,
-        flaps: aircraft.flaps,
-        trim: controls.trim,
-        brake: controls.brake,
-        stall: aircraft.stallWarning,
-        onGround: aircraft.onGround,
+        airspeedKt: shown.airspeedKt,
+        altitudeFt: shown.altitudeFt,
+        vsFpm: shown.verticalSpeedFpm,
+        pitchDeg: shown.pitchDeg,
+        rollDeg: shown.rollDeg,
+        headingDeg: shown.headingDeg,
+        rpm: shown.engine.rpm,
+        throttle: shownControls.throttle,
+        flapsTarget: shownControls.flaps,
+        flaps: shown.flaps,
+        trim: shownControls.trim,
+        brake: shownControls.brake,
+        stall: shown.stallWarning,
+        onGround: shown.onGround,
         fps,
-        trimRoll: controls.trimRoll,
-        trimYaw: controls.trimYaw,
-        gear: current.type.retractableGear ? aircraft.gear : null,
+        trimRoll: shownControls.trimRoll,
+        trimYaw: shownControls.trimYaw,
+        gear: current.type.retractableGear ? shown.gear : null,
       },
-      status || `Wind ${windStr}`,
-      missions.target,
+      (replaying ? replay.caption : radio.caption || status) || `Wind ${windStr}`,
+      replaying ? null : missions.target,
       {
-        pitchDeg: aircraft.pitchDeg,
-        rollDeg: aircraft.rollDeg,
-        headingDeg: aircraft.headingDeg,
-        airspeedKt: aircraft.airspeedKt,
-        altitudeFt: aircraft.altitudeFt,
-        vsFpm: aircraft.verticalSpeedFpm,
-        alphaDeg: (aircraft.aero.alpha * 180) / Math.PI,
-        betaDeg: (aircraft.aero.beta * 180) / Math.PI,
-        gear: current.type.retractableGear ? aircraft.gear : 0,
-        throttle: controls.throttle,
+        pitchDeg: shown.pitchDeg,
+        rollDeg: shown.rollDeg,
+        headingDeg: shown.headingDeg,
+        airspeedKt: shown.airspeedKt,
+        altitudeFt: shown.altitudeFt,
+        vsFpm: shown.verticalSpeedFpm,
+        alphaDeg: (shown.aero.alpha * 180) / Math.PI,
+        betaDeg: (shown.aero.beta * 180) / Math.PI,
+        gear: current.type.retractableGear ? shown.gear : 0,
+        throttle: shownControls.throttle,
       },
-      aircraft.systems,
+      shown.systems,
     );
   }
 
@@ -500,7 +641,7 @@ renderer.setAnimationLoop((time) => {
   // drifting waves (texture offset in tiles; the plane snaps by whole tiles)
   waveTime += dt;
   water.material.normalMap!.offset.set((waveTime * 0.011) % 1, (waveTime * 0.007) % 1);
-  cameraRig.update(dt);
+  if (!replaying) cameraRig.update(dt);
   camera.getWorldPosition(viewer);
   for (const a of airfields) a.update(viewer, weather.current);
   feel.update(running ? dt : 0, aircraft, running && !aircraft.crashed);
@@ -511,14 +652,16 @@ renderer.setAnimationLoop((time) => {
   let title = '';
   let subtitle = '';
   const notice = missions.notice;
-  if (menuOpen) {
-    // the menu says it all
+  const offered = replayOffered();
+  const afterCrash = xr ? 'A: Neustart · B: Wiederholung · Stick-Klick: Menü' : 'R: Neustart · J: Wiederholung · Esc: Menü';
+  if (menuOpen || replaying) {
+    // the menu or the replay bar says it all
   } else if (aircraft.crashed && aircraft.ditched) {
     title = '✔ Notwasserung gelungen!';
-    subtitle = xr ? 'A: Neustart · Stick-Klick: Menü' : 'R: Neustart · Esc: Menü';
+    subtitle = afterCrash;
   } else if (aircraft.crashed) {
     title = `Absturz: ${aircraft.crashReason}`;
-    subtitle = xr ? 'A: Neustart · Stick-Klick: Menü' : 'R: Neustart · Esc: Menü';
+    subtitle = afterCrash;
   } else if (paused) {
     title = 'Pause';
     subtitle = 'P zum Fortsetzen';
@@ -536,20 +679,23 @@ renderer.setAnimationLoop((time) => {
   else {
     hud.setMessage(title, subtitle);
     hud.update(dt, aircraft, controls, fps, windStr, status);
+    hud.setRadio(radio.caption);
   }
+  replayBar.update(offered && !xr, replaying, replaying ? replay.caption : '', replay.paused);
 
   audio.update({
-    rpm: current.type.sound === 'turboprop' ? (aircraft.engine.running ? 58 + aircraft.engine.spool * 40 : 0) : aircraft.engine.rpm,
-    power: aircraft.engine.spool,
-    airspeed: aircraft.aero.airspeed,
-    groundSpeed: Math.hypot(aircraft.vel.x, aircraft.vel.z),
-    onGround: aircraft.onGround,
-    stall: aircraft.stallWarning,
-    silent: aircraft.crashed || !running,
+    rpm: current.type.sound === 'turboprop' ? (shown.engine.running ? 58 + shown.engine.spool * 40 : 0) : shown.engine.rpm,
+    power: shown.engine.spool,
+    airspeed: shown.aero.airspeed,
+    groundSpeed: Math.hypot(shown.vel.x, shown.vel.z),
+    onGround: shown.onGround,
+    stall: !replaying && aircraft.stallWarning,
+    // the replay plays its engine sound too, until the crash
+    silent: replaying ? replay.paused || replay.atEnd : aircraft.crashed || !running,
     // turboprops use the turbine recordings, mapped from torque to an N1-like value
     jet: current.type.sound === 'jet' || current.type.sound === 'turboprop',
     inCockpit,
-    motors,
+    motors: motors && !replaying,
     rain: env.rainLevel,
   });
   renderer.render(scene, camera);
@@ -576,4 +722,4 @@ async function devView(x: number, y: number, z: number, headingDeg: number, mode
   renderer.render(scene, camera);
 }
 
-if (import.meta.env.DEV) Object.assign(window, { sim: { devView, useAircraft, renderer, scene, camera, terrain, env, variants, aircraft, controls, actions, cameraRig, missions, settings, weather, OPTIONS } });
+if (import.meta.env.DEV) Object.assign(window, { sim: { devView, useAircraft, renderer, scene, camera, terrain, env, variants, aircraft, controls, actions, cameraRig, missions, settings, weather, OPTIONS, replay, recorder, radio, traffic } });
