@@ -104,19 +104,44 @@ void main() {
   // rock on steep slopes (the geometric normal is smooth, so the boundary follows the landform)
   float slope = 1.0 - normalize(v_normal).y;
 #ifdef XR_QUALITY
-  float strata = vnoise(vec2(v_height * 0.09, (world.x + world.z) * 0.004));
+  float strata = vnoise(vec2((v_height + dot(v_rel.xz + u_originAbs.xz, vec2(0.09, 0.05))) * 0.09, (world.x + world.z) * 0.004));
   float rockN = vnoise(world.xz * 0.02 + 11.0);
 #else
-  float strata = fbm2(vec2(v_height * 0.09, (world.x + world.z) * 0.004), 3);
+  float strata = fbm2(vec2((v_height + dot(v_rel.xz + u_originAbs.xz, vec2(0.09, 0.05))) * 0.09, (world.x + world.z) * 0.004), 3);
   float rockN = fbm2(world.xz * 0.02 + 11.0, 3);
 #endif
   float rock = smoothstep(0.27, 0.42, slope + (rockN - 0.5) * 0.14);
+  // bedding shows in the walls; on gentler rock it would draw contour lines
+  strata = mix(0.5, strata, smoothstep(0.3, 0.5, slope));
   float snowy = smoothstep(0.55, 0.75, dot(albedo, vec3(0.3, 0.5, 0.2)));
   vec3 rockCol = mix(vec3(0.16, 0.145, 0.13), vec3(0.3, 0.28, 0.25), strata) * (0.8 + 0.4 * rockN);
   // where the landscape is already grey stone (limestone), keep its paler tone in the walls
   float grey = 1.0 - clamp((max(albedo.r, max(albedo.g, albedo.b)) - min(albedo.r, min(albedo.g, albedo.b))) * 9.0, 0.0, 1.0);
   rockCol = mix(rockCol, lum * vec3(1.0, 0.97, 0.92) * (0.75 + 0.45 * strata) * (0.85 + 0.3 * rockN), grey * smoothstep(0.08, 0.16, lum.x));
   albedo = mix(albedo, mix(rockCol, albedo, snowy * 0.6), rock);
+#ifndef XR_QUALITY
+  // ribs, gullies and broken rock on steep ground, far beyond the fine detail; each octave fades out
+  // before it gets smaller than a few pixels
+  float steep = smoothstep(0.1, 0.32, slope);
+  if (steep > 0.0 && dist < 14000.0) {
+    vec2 wp = v_rel.xz + u_originAbs.xz;
+    vec2 grad = vec2(0.0);
+    float cavity = 0.0;
+    float wl = 90.0;
+    for (int i = 0; i < 3; i++) {
+      float fade = 1.0 - smoothstep(wl * 80.0, wl * 200.0, dist);
+      vec2 q = wp / wl + float(i) * 17.3;
+      float r0 = 1.0 - abs(vnoise(q) * 2.0 - 1.0);
+      float rx = 1.0 - abs(vnoise(q + vec2(0.04, 0.0)) * 2.0 - 1.0);
+      float rz = 1.0 - abs(vnoise(q + vec2(0.0, 0.04)) * 2.0 - 1.0);
+      grad += vec2(rx - r0, rz - r0) / 0.04 * fade * (0.5 / float(i + 1));
+      cavity += (1.0 - r0) * fade / float(i + 1);
+      wl *= 0.38;
+    }
+    n = normalize(n - vec3(grad.x, 0.0, grad.y) * 0.55 * steep);
+    albedo *= 1.0 - 0.2 * cavity * steep;
+  }
+#endif
   // detail: small-scale relief and colour breakup, fading with distance
   float near = 1.0 - smoothstep(80.0, 2500.0, dist);
   if (near > 0.0) {

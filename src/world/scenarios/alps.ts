@@ -42,6 +42,34 @@ function ridges(x: number, z: number): number {
   return sum / norm;
 }
 
+/**
+ * Valley-floor parcels: a slightly skewed, wobbly grid of strips (not axis-aligned squares). `kind`
+ * picks hay, field or pasture; `edge` is 1 on a parcel boundary, where hedges and tree rows grow.
+ */
+function fieldCell(x: number, z: number): { kind: number; edge: number } {
+  const wx = x + 45 * noiseB(x * 0.003, z * 0.003) + z * 0.18;
+  const wz = z + 45 * noiseB(x * 0.003 + 9.1, z * 0.003) - x * 0.1;
+  const u = wx / 150;
+  const v = wz / 330;
+  const iu = Math.floor(u);
+  const iv = Math.floor(v);
+  const eu = Math.min(u - iu, 1 - (u - iu)) * 150;
+  const ev = Math.min(v - iv, 1 - (v - iv)) * 330;
+  return { kind: noiseC(iu * 1.7, iv * 1.3), edge: 1 - smooth(Math.min(eu, ev), 3, 9) };
+}
+
+/** Mountain forest on the slopes from the valley floor up to the tree line (0…1); trees follow it. */
+function forestCover(x: number, z: number, h: number, ny: number): number {
+  const field = noiseD(x * 0.004, z * 0.004);
+  const slope = smooth(1 - ny, 0.02, 0.08);
+  // clearings and avalanche tracks break the forest up
+  const clear = smooth(noiseB(x * 0.0021 + 4.4, z * 0.0021 - 8.1), 0.35, 0.6);
+  // the valley floor: hedgerows and the odd tree in the meadows
+  const lowland = (1 - smooth(h, 60, 140)) * smooth(ny, 0.94, 0.99);
+  const hedges = lowland > 0 ? lowland * (0.003 + 0.55 * fieldCell(x, z).edge * smooth(noiseD(x * 0.006, z * 0.006), -0.3, 0.2)) : 0;
+  return hedges + smooth(h + field * 30, 12, 50) * Math.max(slope, smooth(h + field * 40, 50, 130)) * (1 - smooth(h + field * 80, 820, 940)) * (1 - clear * 0.85) * (1 - smooth(1 - ny, 0.3, 0.42));
+}
+
 const LAKE_N = -11500;
 const LAKE_S = -2700;
 
@@ -69,15 +97,9 @@ export function alpineHeight(x: number, z: number): number {
   const mass = 0.62 + 0.38 * noiseD(x * 0.00006 + 2.2, z * 0.00006 - 4.1);
   const r = ridges(x, z);
   // a concave profile: gentle foot, walls steepening upward into sharp summits
-  let above = 2200 * Math.pow(mass * (0.32 + 0.68 * r) * mask, 1.45);
-  // limestone strata: cliff bands with ledges, folded so they cut across the contours
-  const tilt = noiseD(x * 0.00035, z * 0.00035) * 1.6;
-  const f = above / 150 + tilt;
-  const i = Math.floor(f);
-  const terraced = (i + smooth(f - i, 0.5, 0.9) - tilt) * 150;
-  above += (terraced - above) * 0.25 * smooth(above, 150, 420) * (1 - smooth(above, 1150, 1450));
+  const above0 = 2200 * Math.pow(mass * (0.32 + 0.68 * r) * mask, 1.45);
   // rock rubble and gullies on the walls
-  above += (22 * noiseC(x * 0.0045, z * 0.0045) + 7 * noiseA(x * 0.013, z * 0.013)) * smooth(above, 20, 200);
+  const above = above0 + (22 * noiseC(x * 0.0045, z * 0.0045) + 7 * noiseA(x * 0.013, z * 0.013)) * smooth(above0, 20, 200);
   return floor + above;
 }
 
@@ -122,6 +144,7 @@ const C_ROCK = new THREE.Color(0x8a857c);
 const C_LIME = new THREE.Color(0xa29d93);
 const C_SCREE = new THREE.Color(0xb3ada2);
 const C_ALM = new THREE.Color(0x7f8f4a);
+const tmpRock = new THREE.Color();
 const C_SNOW = new THREE.Color(0xf2f4f6);
 // valley floor patchwork: hay, fields, darker pasture
 const C_HAY = new THREE.Color(0x9c9a52);
@@ -141,18 +164,17 @@ export function createAlps(): Scenario {
       out.copy(C_GRASS).lerp(C_GRASS2, field * 0.5 + 0.5);
       // fields on the flatter, lower ground in blocky patches
       const lowland = (1 - smooth(h, 120, 220)) * smooth(ny, 0.94, 0.99);
-      const cell = noiseC(Math.floor(x / 180) * 1.7, Math.floor(z / 240) * 1.3);
+      const cell = fieldCell(x, z).kind;
       if (cell > 0.35) out.lerp(C_HAY, lowland * 0.7);
       else if (cell < -0.4) out.lerp(C_FIELD, lowland * 0.6);
       else if (cell < -0.1) out.lerp(C_PASTURE, lowland * 0.5);
       // mountain forest on the slopes up to the tree line, pasture and dwarf pine above it
-      const slopeF = smooth(1 - ny, 0.02, 0.08);
-      out.lerp(C_FOREST, smooth(h + field * 30, 12, 50) * Math.max(slopeF, smooth(h + field * 40, 50, 130)) * (1 - smooth(h + field * 80, 820, 940)));
+      out.lerp(C_FOREST, forestCover(x, z, h, ny));
       out.lerp(C_ALM, smooth(h + field * 80, 860, 960) * smooth(ny, 0.86, 0.95) * 0.8);
       // limestone above the pasture and on every steep wall; scree on the moderately steep high ground
-      const strata = noiseC(x * 0.0009, h * 0.02);
+      const tone = smooth(noiseC(x * 0.0011 + 3.3, z * 0.0011), -0.4, 0.4);
       out.lerp(C_SCREE, smooth(h, 700, 900) * smooth(1 - ny, 0.12, 0.2) * 0.8);
-      out.lerp(strata > 0 ? C_LIME : C_ROCK, Math.max(smooth(h + field * 80, 1050, 1220), smooth(1 - ny, 0.2, 0.32)));
+      out.lerp(tmpRock.copy(C_ROCK).lerp(C_LIME, tone), Math.max(smooth(h + field * 80, 1050, 1220), smooth(1 - ny, 0.2, 0.32)));
       out.lerp(C_SNOW, smooth(h + field * 60, 1280, 1400) * smooth(ny, 0.72, 0.86));
       out.lerp(C_SAND, 1 - smooth(h, 1, 4));
       return out.multiplyScalar(0.92 + noiseC(x * 0.02, z * 0.02) * 0.08);
@@ -160,7 +182,12 @@ export function createAlps(): Scenario {
     airports: [home, mountain],
     destination: mountain,
     missions: ['free', 'airstart', 'landing', 'rings', 'crosscountry'],
-    trees: { center: new THREE.Vector3(0, 0, 0), radius: 3500, ok: (_x, _z, h, slope) => h > 4 && h < 900 && slope < 13 },
+    trees: {
+      center: new THREE.Vector3(0, 0, 0),
+      radius: 3500,
+      ok: (_x, _z, h, slope) => h > 4 && h < 900 && slope < 13,
+      density: forestCover,
+    },
     cloudBase: 1100,
     waterColor: 0x2f6f8f,
     ringCourse: (height) => valleyCourse(height, home, 2024),

@@ -24,7 +24,13 @@ export interface Scenario {
   destination: Airport | null;
   missions: MissionId[];
   /** where trees may grow (null = no trees) */
-  trees: { center: Vector3; radius: number; ok(x: number, z: number, h: number, slope: number): boolean } | null;
+  trees: {
+    center: Vector3;
+    radius: number;
+    ok(x: number, z: number, h: number, slope: number): boolean;
+    /** how densely wooded the ground is (0…1, ny = normal.y); without it forests come in noise patches */
+    density?(x: number, z: number, h: number, ny: number): number;
+  } | null;
   cloudBase: number;
   waterColor: number;
   ringCourse(height: (x: number, z: number) => number): RingCourseDef;

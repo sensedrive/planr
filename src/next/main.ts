@@ -408,7 +408,7 @@ function windText(): string {
 
 /** Desktop drawing resolution: device pixels, capped for the HDR pipeline. */
 function canvasSize(): [number, number] {
-  const dpr = Math.min(window.devicePixelRatio, 1.5);
+  const dpr = Math.min(window.devicePixelRatio, 2);
   return [Math.max(1, Math.round(window.innerWidth * dpr)), Math.max(1, Math.round(window.innerHeight * dpr))];
 }
 
@@ -466,7 +466,7 @@ function step(dt: number, inXR: boolean): void {
 
   // in VR every frame is drawn twice: keep the city's far detail range shorter there
   city?.update(pos.x, pos.z, inXR ? 2 : 3, inXR ? 3600 : undefined);
-  forest.density = inXR ? 0.6 : 1;
+  forest.density = inXR ? 0.3 : 1;
   forest.update(pos.x, pos.z, inXR ? 2 : 3);
   sky.update(dt, pos, aircraft.vel);
   cameraRig.update(dt);
