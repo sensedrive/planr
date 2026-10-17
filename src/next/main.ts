@@ -458,46 +458,7 @@ function step(dt: number, inXR: boolean): void {
   cockpitMouse.enabled = inCockpit && !inXR && !menuOpen;
   const windStr = windText();
   if (inCockpit) {
-    cockpit().update(
-      dt,
-      controls,
-      aircraft.gear,
-      {
-        airspeedKt: aircraft.airspeedKt,
-        altitudeFt: aircraft.altitudeFt,
-        vsFpm: aircraft.verticalSpeedFpm,
-        pitchDeg: aircraft.pitchDeg,
-        rollDeg: aircraft.rollDeg,
-        headingDeg: aircraft.headingDeg,
-        rpm: aircraft.engine.rpm,
-        throttle: controls.throttle,
-        flapsTarget: controls.flaps,
-        flaps: aircraft.flaps,
-        trim: controls.trim,
-        brake: controls.brake,
-        stall: aircraft.stallWarning,
-        onGround: aircraft.onGround,
-        fps,
-        trimRoll: controls.trimRoll,
-        trimYaw: controls.trimYaw,
-        gear: current.type.retractableGear ? aircraft.gear : null,
-      },
-      status || `Wind ${windStr}`,
-      missions.target,
-      {
-        pitchDeg: aircraft.pitchDeg,
-        rollDeg: aircraft.rollDeg,
-        headingDeg: aircraft.headingDeg,
-        airspeedKt: aircraft.airspeedKt,
-        altitudeFt: aircraft.altitudeFt,
-        vsFpm: aircraft.verticalSpeedFpm,
-        alphaDeg: (aircraft.aero.alpha * 180) / Math.PI,
-        betaDeg: (aircraft.aero.beta * 180) / Math.PI,
-        gear: current.type.retractableGear ? aircraft.gear : 0,
-        throttle: controls.throttle,
-      },
-      aircraft.systems,
-    );
+    updateCockpit(dt, status || `Wind ${windStr}`);
   }
 
   // in VR every frame is drawn twice: keep the city's far detail range shorter there
@@ -598,6 +559,50 @@ xr.onFrame = (time) => {
 if (!new URLSearchParams(location.search).has('still')) requestAnimationFrame(desktopFrame);
 
 /** Dev helper: put the aircraft somewhere, finish building the world around it and render one frame. */
+/** Feeds the cockpit instruments and displays. */
+function updateCockpit(dt: number, statusLine: string): void {
+  cockpit().update(
+    dt,
+    controls,
+    aircraft.gear,
+    {
+      airspeedKt: aircraft.airspeedKt,
+      altitudeFt: aircraft.altitudeFt,
+      vsFpm: aircraft.verticalSpeedFpm,
+      pitchDeg: aircraft.pitchDeg,
+      rollDeg: aircraft.rollDeg,
+      headingDeg: aircraft.headingDeg,
+      rpm: aircraft.engine.rpm,
+      throttle: controls.throttle,
+      flapsTarget: controls.flaps,
+      flaps: aircraft.flaps,
+      trim: controls.trim,
+      brake: controls.brake,
+      stall: aircraft.stallWarning,
+      onGround: aircraft.onGround,
+      fps,
+      trimRoll: controls.trimRoll,
+      trimYaw: controls.trimYaw,
+      gear: current.type.retractableGear ? aircraft.gear : null,
+    },
+    statusLine,
+    missions.target,
+    {
+      pitchDeg: aircraft.pitchDeg,
+      rollDeg: aircraft.rollDeg,
+      headingDeg: aircraft.headingDeg,
+      airspeedKt: aircraft.airspeedKt,
+      altitudeFt: aircraft.altitudeFt,
+      vsFpm: aircraft.verticalSpeedFpm,
+      alphaDeg: (aircraft.aero.alpha * 180) / Math.PI,
+      betaDeg: (aircraft.aero.beta * 180) / Math.PI,
+      gear: current.type.retractableGear ? aircraft.gear : 0,
+      throttle: controls.throttle,
+    },
+    aircraft.systems,
+  );
+}
+
 function devView(x: number, y: number, z: number, headingDeg: number, mode: 'chase' | 'cockpit' = 'chase'): void {
   const h = (headingDeg * Math.PI) / 180;
   aircraft.pos.set(x, y, z);
@@ -620,6 +625,7 @@ function devView(x: number, y: number, z: number, headingDeg: number, mode: 'cha
   model().update(0, controls, aircraft);
   model().fuselage.visible = mode !== 'cockpit';
   cockpit().group.visible = mode === 'cockpit';
+  if (mode === 'cockpit') updateCockpit(1, '');
   renderer.render([desktopView(w, hh)], sky.env, [scene], { kind: 'canvas', width: w, height: hh }, vignette.effects);
   renderer.terrainBudget = 6000;
 }

@@ -63,6 +63,7 @@ uniform float u_doubleSided;
 uniform float u_receiveShadow;
 uniform float u_isPoint;
 uniform float u_fogged;
+uniform float u_interior;
 
 in vec3 v_rel;
 in vec3 v_normal;
@@ -95,7 +96,15 @@ void main() {
     s.emissive = u_emissive;
     s.occlusion = 1.0;
     s.sunVisibility = u_receiveShadow > 0.5 ? sunShadow(v_rel, n) : 1.0;
-    c = shade(s, v_rel, u_origin.w + v_rel.y);
+    float hM = u_origin.w + v_rel.y;
+    c = shade(s, v_rel, hM);
+    if (u_interior > 0.5) {
+      // cabin: light coming in through the glazing, bounced off seats, floor and glare shield
+      vec3 skyIn = skyAmbient(vec3(0.0, 1.0, 0.0));
+      vec3 sunIn = u_sunColor.rgb * transmittanceToSun(hM) * max(u_sunDir.y, 0.0) * (1.0 - u_weather.x * 0.85);
+      vec3 fill = skyIn * 1.4 + sunIn * 0.3;
+      c += base.rgb * (1.0 - s.metalness) * fill * (0.75 + 0.25 * (n.y * 0.5 + 0.5)) / PI;
+    }
   }
   if (u_fogged > 0.5) c = applyClouds(applyAerial(c, v_rel), v_rel);
   writeColor(c, base.a);

@@ -35,6 +35,8 @@ export interface DrawItem {
   group: { start: number; count: number } | null;
   /** squared distance to the camera, for sorting */
   dist: number;
+  /** inside a cabin (an ancestor has userData.interior): lit by light coming in through the windows */
+  interior: boolean;
 }
 
 const tmpM = new THREE.Matrix4();
@@ -87,8 +89,9 @@ export class MeshRenderer {
     this.casters.length = 0;
     this.spot = null;
     if (viewProjWorld) this.frustum.setFromProjectionMatrix(this.projScreen.copy(viewProjWorld));
-    const visit = (o: THREE.Object3D) => {
+    const visit = (o: THREE.Object3D, interior: boolean) => {
       if (!o.visible) return;
+      interior ||= o.userData.interior === true;
       const r = o as THREE.Mesh;
       const sl = o as THREE.SpotLight;
       if (sl.isSpotLight && sl.intensity > 0) {
@@ -112,7 +115,7 @@ export class MeshRenderer {
           const g = groups[gi];
           const mat = g ? mats[g.materialIndex ?? 0] : mats[0];
           if (!mat || !mat.visible) continue;
-          const item: DrawItem = { object: o as DrawItem['object'], material: mat, group: g ? { start: g.start, count: g.count } : null, dist };
+          const item: DrawItem = { object: o as DrawItem['object'], material: mat, group: g ? { start: g.start, count: g.count } : null, dist, interior };
           if (inView) {
             if (mat.transparent || (o as THREE.Points).isPoints || (o as THREE.Sprite).isSprite) this.transparent.push(item);
             else this.opaque.push(item);
@@ -120,11 +123,11 @@ export class MeshRenderer {
           if (o.castShadow && !mat.transparent && Math.sqrt(dist) - tmpSphere.radius < shadowRange && !(o as THREE.Points).isPoints) this.casters.push(item);
         }
       }
-      for (const c of o.children) visit(c);
+      for (const c of o.children) visit(c, interior);
     };
     for (const root of roots) {
       root.updateMatrixWorld();
-      visit(root);
+      visit(root, false);
     }
     this.opaque.sort((a, b) => a.object.renderOrder - b.object.renderOrder || a.dist - b.dist);
     this.transparent.sort((a, b) => a.object.renderOrder - b.object.renderOrder || b.dist - a.dist);
@@ -335,7 +338,8 @@ export class MeshRenderer {
       p.f1('u_unlit', unlit ? 1 : 0);
       p.f1('u_flat', mat.flatShading || !geo.attributes.normal ? 1 : 0);
       p.f1('u_doubleSided', mat.side === THREE.DoubleSide ? 1 : 0);
-      p.f1('u_receiveShadow', o.receiveShadow || inst ? 1 : 1);
+      p.f1('u_receiveShadow', 1);
+      p.f1('u_interior', item.interior ? 1 : 0);
       const isPoints = (o as THREE.Points).isPoints;
       p.f1('u_isPoint', isPoints ? 1 : 0);
       p.f1('u_pointSize', isPoints ? (mat.size ?? 1) * this.pointScale : 1);
