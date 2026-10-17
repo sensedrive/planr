@@ -5,7 +5,7 @@ import { atmosphereCommon, atmosphereLookup } from '../shaders/atmosphere';
 import { cloudDensity, cloudLookup, cloudShadowLookup } from '../shaders/clouds';
 import { FRAME, frame, fullscreenVS, noise, output, tonemap } from '../shaders/common';
 import { lighting, shadows } from '../shaders/lighting';
-import { compositeFS, downFS, upFS, visionFS, visionVS } from '../shaders/post';
+import { compositeFS, downFS, raysFS, upFS, visionFS, visionVS } from '../shaders/post';
 import { skyFS, skyVS } from '../shaders/sky';
 import { waterFS, waterVS } from '../shaders/water';
 import { Atmosphere, type AtmosphereState } from './atmosphere';
@@ -98,9 +98,11 @@ export class Renderer {
   private readonly shadowMats: Float32Array[] = [0, 1, 2].map(() => new Float32Array(16));
   /** world position (metres, float64) all GPU coordinates are relative to */
   readonly origin = new Float64Array(3);
-  private hdr: { w: number; h: number; samples: number; msaa: Target; resolved: Target; color: Texture; bloom: { tex: Texture; t: Target }[] } | null = null;
+  private hdr: { w: number; h: number; samples: number; msaa: Target; resolved: Target; color: Texture; bloom: { tex: Texture; t: Target }[]; rays: { tex: Texture; t: Target } } | null = null;
+  /** sun position on screen (NDC xy), z: visible weight; for the light shafts */
+  private readonly sunScreen = new Float32Array(3);
   private xrTargets = new Map<WebGLTexture, { fb: WebGLFramebuffer; depth: WebGLTexture }>();
-  private readonly post: { down: Program; up: Program; composite: Program };
+  private readonly post: { down: Program; up: Program; rays: Program; composite: Program };
   shadowsEnabled = true;
   shadowSize: number;
   /** terrain samples the clipmap may compute per frame */
@@ -174,6 +176,7 @@ export class Renderer {
     this.post = {
       down: dev.program('post-down', fullscreenVS, downFS),
       up: dev.program('post-up', fullscreenVS, upFS),
+      rays: dev.program('post-rays', fullscreenVS, raysFS),
       composite: dev.program('post-composite', fullscreenVS, compositeFS),
     };
   }
@@ -248,6 +251,16 @@ export class Renderer {
     for (let i = 0; i < 2; i++) {
       const v = views[Math.min(i, views.length - 1)];
       viewProjection(vp, v, o, near, reversed, tmpA, tmpB);
+      if (i === 0) {
+        // the sun is a direction: project it with w = 0
+        const cx = vp[0] * L[0] + vp[4] * L[1] + vp[8] * L[2];
+        const cy = vp[1] * L[0] + vp[5] * L[1] + vp[9] * L[2];
+        const cw = vp[3] * L[0] + vp[7] * L[1] + vp[11] * L[2];
+        const sx = cw > 0 ? cx / cw : 0;
+        const sy = cw > 0 ? cy / cw : 0;
+        const onScreen = cw > 0 ? Math.max(0, 1 - Math.max(0, Math.max(Math.abs(sx), Math.abs(sy)) - 1) / 0.6) : 0;
+        this.sunScreen.set([sx, sy, onScreen * (night > 0.5 ? 0 : 1) * Math.min(1, Math.max(0, L[1] * 8))]);
+      }
       f.set(vp, FRAME.viewProj + i * 16);
       invert(tmpA, vp);
       f.set(tmpA, FRAME.invViewProj + i * 16);
@@ -570,7 +583,9 @@ export class Renderer {
       const tex = this.dev.texture2D({ width: bw, height: bh, format: fmt });
       bloom.push({ tex, t: new Target(this.dev, bw, bh, [tex], null) });
     }
-    this.hdr = { w, h, samples, msaa, resolved, color, bloom };
+    const raysTex = this.dev.texture2D({ width: bloom[1].tex.width, height: bloom[1].tex.height, format: fmt });
+    const rays = { tex: raysTex, t: new Target(this.dev, raysTex.width, raysTex.height, [raysTex], null) };
+    this.hdr = { w, h, samples, msaa, resolved, color, bloom, rays };
     return this.hdr;
   }
 
@@ -589,6 +604,17 @@ export class Renderer {
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       src = b.tex;
     });
+    // light shafts: radial blur of the bright pass towards the sun, before the upsampling adds into it
+    const sun = this.sunScreen;
+    if (sun[2] > 0.001) {
+      t.rays.t.bind();
+      this.post.rays
+        .use()
+        .tex('u_src', t.bloom[1].tex)
+        .f3('u_sun', sun[0] * 0.5 + 0.5, sun[1] * 0.5 + 0.5, sun[2])
+        .f1('u_aspect', w / h);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
     const u = this.post.up.use();
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE);
@@ -606,6 +632,8 @@ export class Renderer {
       .use()
       .tex('u_scene', t.color)
       .tex('u_bloom', t.bloom[0].tex)
+      .tex('u_rays', t.rays.tex)
+      .f1('u_raysStrength', sun[2] * (1 - env.rain) * 0.5)
       .f1('u_bloomStrength', 0.06 + env.rain * 0.05)
       .f4('u_vision', 0, 0, 0, this.time % 100)
       .f1('u_night', env.night);

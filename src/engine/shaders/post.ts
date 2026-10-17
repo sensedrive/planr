@@ -43,10 +43,44 @@ void main() {
 }
 `;
 
+/** Crepuscular rays: march from each pixel towards the sun through the bright pass, with decay. */
+export const raysFS = /* glsl */ `
+uniform sampler2D u_src;
+uniform vec3 u_sun;           // xy: sun in uv, z: strength
+uniform float u_aspect;
+in vec2 v_uv;
+out vec4 fragColor;
+float h12(vec2 p) {
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+void main() {
+  vec2 toSun = u_sun.xy - v_uv;
+  const int N = 40;
+  vec2 stepUv = toSun / float(N) * 0.85;
+  vec2 uv = v_uv + stepUv * h12(gl_FragCoord.xy);
+  vec3 acc = vec3(0.0);
+  float w = 1.0;
+  for (int i = 0; i < N; i++) {
+    vec3 s = texture(u_src, uv).rgb;
+    acc += min(s, vec3(40.0)) * w;
+    w *= 0.955;
+    uv += stepUv;
+  }
+  // strongest close to the sun, fading towards the screen edges
+  vec2 d = toSun * vec2(u_aspect, 1.0);
+  float fall = exp(-dot(d, d) * 1.6);
+  fragColor = vec4(acc / float(N) * fall * u_sun.z, 1.0);
+}
+`;
+
 export const compositeFS = /* glsl */ `
 #include <tonemap>
 uniform sampler2D u_scene;
 uniform sampler2D u_bloom;
+uniform sampler2D u_rays;
+uniform float u_raysStrength;
 uniform float u_bloomStrength;
 uniform vec4 u_vision;        // w: time (dither seed)
 uniform float u_night;
@@ -63,6 +97,7 @@ void main() {
   vec3 c = texture(u_scene, v_uv).rgb;
   vec3 b = texture(u_bloom, v_uv).rgb;
   c = mix(c, b, u_bloomStrength);
+  if (u_raysStrength > 0.0) c += texture(u_rays, v_uv).rgb * u_raysStrength;
   // night vision: rods take over, colours fade and shift blue (Purkinje)
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
   float scotopic = u_night * (1.0 - smoothstep(0.02, 0.6, l));
