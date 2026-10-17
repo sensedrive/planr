@@ -70,7 +70,7 @@ export class City {
   private readonly buildings: Building[] = [];
   private readonly cells = new Map<number, number[]>();
   private readonly tiles = new Map<string, { near: THREE.Mesh | null; far: THREE.Mesh | null; ids: number[] }>();
-  private readonly material: THREE.MeshLambertMaterial;
+  readonly material: THREE.MeshLambertMaterial;
   private readonly queue: { key: string; level: 'near' | 'far' }[] = [];
 
   constructor(buf: ArrayBuffer, ground: (x: number, z: number) => number) {

@@ -78,6 +78,7 @@ export const meshFS = /* glsl */ `
 #include <output>
 
 uniform sampler2D u_map;
+uniform sampler2D u_emissiveMap;
 uniform vec4 u_color;          // rgb (linear), a: opacity
 uniform vec3 u_emissive;       // linear, HDR
 uniform vec4 u_material;       // x: roughness, y: metalness, z: map present, w: alpha test
@@ -135,7 +136,7 @@ void main() {
     s.normal = n;
     s.roughness = u_material.x;
     s.metalness = u_material.y;
-    s.emissive = u_emissive * displayScale;
+    s.emissive = u_emissive * texture(u_emissiveMap, v_uv).rgb * displayScale;
     s.occlusion = v_ao * leafAO;
     s.sunVisibility = u_receiveShadow > 0.5 ? sunShadow(v_rel, n) : 1.0;
     float hM = u_origin.w + v_rel.y;

@@ -135,6 +135,8 @@ async function useScenario(id: ScenarioId): Promise<void> {
   for (const a of airfields) worldGroup.add(a.group);
   forest.reset();
   city = id === 'nyc' && nyc ? nyc.city : null;
+  // facades are painted white for the old renderer's flat light; real concrete and glass reflect far less
+  city?.material.color.setScalar(0.42);
   if (city && nyc) worldGroup.add(city.group, nyc.landmarks);
   renderer.terrain.reset(scenarioTerrain);
   sky.setWater(s.waterColor);
@@ -212,7 +214,8 @@ function applyLive(): void {
   stickConfig.travel = settings.stick;
   sky.setTime(settings.time);
   for (const a of airfields) a.setNight(settings.time !== 'day');
-  city?.setLights(settings.time === 'night' ? 1 : settings.time === 'evening' ? 0.55 : 0);
+  // lit windows are light sources: far brighter than moonlit facades
+  city?.setLights(settings.time === 'night' ? 1.3 : settings.time === 'evening' ? 0.3 : 0);
 }
 
 let loading = false;

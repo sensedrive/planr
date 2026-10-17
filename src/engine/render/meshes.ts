@@ -322,6 +322,10 @@ export class MeshRenderer {
       } else uv9.set([1, 0, 0, 0, 1, 0, 0, 0, 1]);
       gl.uniformMatrix3fv(p.loc('u_uvTransform'), false, uv9);
       p.tex('u_map', tex ?? this.white);
+      // lit windows and the like: the emissive colour only where the emissive map says so
+      const emap = (mat as { emissiveMap?: THREE.Texture | null }).emissiveMap ?? null;
+      const etex = emap ? this.texture(emap) : null;
+      p.tex('u_emissiveMap', etex ?? this.white);
 
       const unlit = (mat as THREE.Material).type === 'MeshBasicMaterial' || (mat as THREE.Material).type === 'LineBasicMaterial' || (mat as THREE.Material).type === 'PointsMaterial' || (mat as THREE.Material).type === 'SpriteMaterial';
       tmpColor.copy(mat.color ?? tmpColor.set(1, 1, 1));
@@ -331,7 +335,7 @@ export class MeshRenderer {
       const glow = unlit ? (isSpriteMat(mat) ? 1 : additive ? 3 : mat.toneMapped === false ? 2.2 : 1) : 1;
       p.f4('u_color', tmpColor.r * glow, tmpColor.g * glow, tmpColor.b * glow, opacity);
       const em = mat.emissive;
-      const ei = (mat.emissiveIntensity ?? 1) * 3;
+      const ei = (mat.emissiveIntensity ?? 1) * 1.2;
       p.f3('u_emissive', em ? em.r * ei : 0, em ? em.g * ei : 0, em ? em.b * ei : 0);
       const rough = mat.type === 'MeshStandardMaterial' || mat.type === 'MeshPhysicalMaterial' ? mat.roughness : mat.type === 'MeshPhongMaterial' ? Math.sqrt(2 / (mat.shininess + 2)) : 0.85;
       p.f4('u_material', rough, mat.metalness ?? 0, tex ? 1 : 0, mat.alphaTest ?? 0);

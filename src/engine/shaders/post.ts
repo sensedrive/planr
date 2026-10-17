@@ -110,7 +110,7 @@ void main() {
   if (u_raysStrength > 0.0) c += texture(u_rays, v_uv).rgb * u_raysStrength;
   // night vision: rods take over, colours fade and shift blue (Purkinje)
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
-  float scotopic = u_night * (1.0 - smoothstep(0.02, 0.6, l));
+  float scotopic = u_night * (1.0 - smoothstep(0.01, 0.22, l));
   c = mix(c, vec3(l) * vec3(0.72, 0.85, 1.15), scotopic * 0.7);
   // lens vignetting
   vec2 q = v_uv - 0.5;

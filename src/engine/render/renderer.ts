@@ -236,7 +236,7 @@ export class Renderer {
     };
     // the eye adapts: brighter scenes are exposed down (sun elevation drives the daylight level)
     const daylight = Math.max(0.02, Math.min(1, (L[1] + 0.05) * 3)) * (1 - env.overcast * 0.6);
-    const exposure = (night > 0.5 ? 0.85 / MOON_ILLUMINANCE : 6 / (SUN_ILLUMINANCE * (0.3 + 0.7 * daylight))) * env.exposure;
+    const exposure = (night > 0.5 ? 0.55 / MOON_ILLUMINANCE : 6 / (SUN_ILLUMINANCE * (0.3 + 0.7 * daylight))) * env.exposure;
 
     // ---- terrain data ----------------------------------------------------------------------------
     this.terrain.update(o[0], o[2], this.terrainBudget);
