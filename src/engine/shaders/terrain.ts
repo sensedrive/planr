@@ -89,6 +89,23 @@ void main() {
   albedo = pow(albedo, vec3(2.2));
 
   vec3 n = normalize(v_normal);
+  // macro variation: meadows, scree and forest floor never share one flat tint at any distance
+  float macro = fbm2(world.xz * 0.0011 + 3.1, 4);
+  albedo *= 0.82 + 0.36 * macro;
+  // meadows: less golf-course green, with dry olive and ochre patches
+  float green = clamp((albedo.g - max(albedo.r, albedo.b)) * 8.0, 0.0, 1.0);
+  float dry = smoothstep(0.35, 0.75, fbm2(world.xz * 0.0045 + 5.3, 3));
+  vec3 lum = vec3(dot(albedo, vec3(0.3, 0.59, 0.11)));
+  vec3 natural = mix(mix(lum, albedo, 0.75) * vec3(1.02, 0.97, 0.85), lum * vec3(1.35, 1.12, 0.62), dry * 0.55);
+  albedo = mix(albedo, natural, green);
+  // rock on steep slopes (the geometric normal is smooth, so the boundary follows the landform)
+  float slope = 1.0 - normalize(v_normal).y;
+  float strata = fbm2(vec2(v_height * 0.09, (world.x + world.z) * 0.004), 3);
+  float rockN = fbm2(world.xz * 0.02 + 11.0, 3);
+  float rock = smoothstep(0.27, 0.42, slope + (rockN - 0.5) * 0.14);
+  float snowy = smoothstep(0.55, 0.75, dot(albedo, vec3(0.3, 0.5, 0.2)));
+  vec3 rockCol = mix(vec3(0.16, 0.145, 0.13), vec3(0.3, 0.28, 0.25), strata) * (0.8 + 0.4 * rockN);
+  albedo = mix(albedo, mix(rockCol, albedo, snowy * 0.6), rock);
   // detail: small-scale relief and colour breakup, fading with distance
   float near = 1.0 - smoothstep(80.0, 2500.0, dist);
   if (near > 0.0) {
@@ -101,7 +118,7 @@ void main() {
     float h0 = fbm2(q, 3);
     float nx = fbm2(q + vec2(e * 0.05, 0.0), 3) - h0;
     float nz = fbm2(q + vec2(0.0, e * 0.05), 3) - h0;
-    n = normalize(n + vec3(-nx, 0.0, -nz) * 2.0 * near);
+    n = normalize(n + vec3(-nx, 0.0, -nz) * (2.0 + 3.0 * rock) * near);
   }
   // wet sand and muddy shore just above the water line
   float shore = 1.0 - smoothstep(0.2, 2.5, v_height);
@@ -110,7 +127,7 @@ void main() {
   Surface s;
   s.albedo = albedo;
   s.normal = n;
-  s.roughness = mix(0.92, 0.55, shore);
+  s.roughness = mix(mix(0.92, 0.75, rock), 0.55, max(shore, snowy * 0.6));
   s.metalness = 0.0;
   s.emissive = vec3(0.0);
   s.occlusion = 1.0;
