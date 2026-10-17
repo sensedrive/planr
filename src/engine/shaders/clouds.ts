@@ -107,7 +107,9 @@ float density(vec3 wp, float h, bool cheap) {
   float cov = weatherMap(wp.xz);
   if (cov <= 0.01) return 0.0;
   // cumulus profile: rounded base, anvil-free top that thins out
-  float profile = smoothstep(0.0, 0.12, h) * smoothstep(1.0, 0.55 - 0.25 * u_weather.x, h);
+  // per-cloud height: towers where the weather map is dense, flat puffs elsewhere
+  float topH = mix(0.45, 1.0, smoothstep(0.35, 0.95, cov));
+  float profile = smoothstep(0.0, 0.06, h) * smoothstep(topH, topH * (0.5 - 0.2 * u_weather.x), h);
   vec3 drift = vec3(u_wind.x, 0.0, u_wind.y);
   vec3 sp = (wp + drift) * SHAPE_SCALE;
   vec4 s = texture(u_shape, sp);
@@ -117,7 +119,8 @@ float density(vec3 wp, float h, bool cheap) {
   // erode the edges with high-frequency detail, wispy at the bottom, billowy at the top
   float d = texture(u_detail, (wp + drift * 1.6) * DETAIL_SCALE + vec3(0.0, u_ambient.w * 0.002, 0.0)).r;
   float detail = mix(d, 1.0 - d, clamp(h * 4.0, 0.0, 1.0));
-  shape = clamp((shape - detail * 0.32 * (1.0 - shape)) / (1.0 - detail * 0.32 + 1e-3), 0.0, 1.0);
+  float er = 0.45 * (1.0 - shape);
+  shape = clamp((shape - detail * er) / (1.0 - detail * er + 1e-3), 0.0, 1.0);
   return shape * u_cloudParams.w;
 }
 
@@ -172,47 +175,50 @@ void main() {
   float phase = mix(hg(cosT, 0.65), hg(cosT, -0.2), 0.35);
   vec3 sunCol = u_sunColor.rgb * transmittanceToSun(u_cloudParams.y) ;
   vec3 ambTop = skyAmbient(vec3(0.0, 1.0, 0.0)) / PI;
-  vec3 ambBottom = skyAmbient(vec3(0.0, -1.0, 0.0)) / PI * 0.6 + sunCol * max(u_sunDir.y, 0.0) * 0.03;
+  vec3 ambBottom = skyAmbient(vec3(0.0, -1.0, 0.0)) / PI * 0.45 + sunCol * max(u_sunDir.y, 0.0) * 0.02;
   float T = 1.0;
   vec3 L = vec3(0.0);
   float front = -1.0;
-  float t = seg.x;
-  float dt = len / float(steps);
-  t += dt * jitter;
-  for (int i = 0; i < 96; i++) {
-    if (i >= steps || T < 0.02 || t > seg.y) break;
+  // samples spread quadratically along the segment: fine near the entry, coarse far away, so
+  // grazing rays through 40 km of layer neither band nor waste steps on the distance
+  float fs = float(steps);
+  for (int i = 0; i < 128; i++) {
+    if (i >= steps || T < 0.015) break;
+    float u0 = (float(i) + jitter) / fs;
+    float t = seg.x + len * u0 * u0;
+    float dt = len * (2.0 * u0 + 1.0 / fs) / fs;
     vec3 wp = o + dir * t;
     float h = heightFraction(wp.y);
-    float sigma = density(wp, h, false) * 0.03;
+    float sigma = density(wp, h, false) * 0.045;
     if (sigma > 0.0) {
       if (front < 0.0) front = t;
-      // light march towards the sun
+      // light march towards the sun, growing steps
       float od = 0.0;
-      float ls = (u_cloudParams.y - u_cloudParams.x) * 0.12;
+      float ls = (u_cloudParams.y - u_cloudParams.x) * 0.1;
       for (int k = 0; k < 6; k++) {
         if (k >= int(u_cloudSteps.y)) break;
-        vec3 lp = wp + u_sunDir.xyz * ls * (float(k) + 0.5) * (1.0 + float(k) * 0.6);
-        od += density(lp, heightFraction(lp.y), k > 1) * 0.03 * ls * (1.0 + float(k) * 0.6);
+        float w = 1.0 + float(k) * 0.8;
+        vec3 lp = wp + u_sunDir.xyz * ls * (float(k) + 0.5) * w;
+        od += density(lp, heightFraction(lp.y), k > 1) * 0.045 * ls * w;
       }
       // multiple scattering after Wrenninge: a few octaves with attenuated extinction
       vec3 S = vec3(0.0);
       float a = 1.0, b = 1.0, c = 1.0;
       for (int m = 0; m < 3; m++) {
-        S += a * exp(-od * b) * mix(hg(cosT * c, 0.65 * c), hg(cosT, -0.2), 0.35) * sunCol;
-        a *= 0.5; b *= 0.5; c *= 0.6;
+        S += a * exp(-od * b) * mix(hg(cosT * c, 0.7 * c), hg(cosT, -0.25), 0.3) * sunCol;
+        a *= 0.55; b *= 0.4; c *= 0.6;
       }
-      // powder: dark edges facing the sun on dense clouds
-      float powder = 1.0 - exp(-sigma * 60.0);
-      S *= mix(1.0, powder * 1.6 + 0.2, 0.5);
-      vec3 amb = mix(ambBottom, ambTop, h);
+      // powder: dark crevices on the sunny side of dense clouds
+      float powder = 1.0 - exp(-sigma * 50.0);
+      S *= mix(1.0, powder * 1.7 + 0.15, 0.55 * (1.0 - max(cosT, 0.0)));
+      // ambient: open sky above, darker in the cloud's belly
+      vec3 amb = mix(ambBottom, ambTop, smoothstep(0.0, 0.85, h)) * (0.55 + 0.45 * h);
       S += amb * (1.0 - u_weather.x * 0.3);
       S *= sigma;
       float st = exp(-sigma * dt);
       L += T * (S - S * st) / max(sigma, 1e-6);
       T *= st;
     }
-    // larger steps far away
-    t += dt;
   }
   if (front > 0.0) {
     // haze between us and the cloud
@@ -258,7 +264,7 @@ void main() {
   const int N = 8;
   for (int i = 0; i < N; i++) {
     vec3 p = q + L * len * (float(i) + 0.5) / float(N);
-    od += density(p, heightFraction(p.y), true) * 0.03 * len / float(N);
+    od += density(p, heightFraction(p.y), true) * 0.045 * len / float(N);
   }
   fragColor = vec4(exp(-od * 0.8), 0.0, 0.0, 1.0);
 }
