@@ -19,7 +19,7 @@ export interface Caps {
 
 export type Defines = Record<string, string | number | boolean | undefined>;
 
-const SHARED_HEADER = `#version 300 es
+const PRECISION = `
 precision highp float;
 precision highp int;
 precision highp sampler2D;
@@ -111,8 +111,9 @@ export class Device {
       .map(([k, v]) => `#define ${k} ${v === true ? 1 : v}`)
       .join('\n');
     const mv = defines.MULTIVIEW ? '#extension GL_OVR_multiview2 : require\n' : '';
-    const vsHead = SHARED_HEADER + mv + defs + '\n' + (defines.MULTIVIEW ? 'layout(num_views = 2) in;\n#define VIEW_ID int(gl_ViewID_OVR)\n' : '#define VIEW_ID 0\n');
-    const fsHead = SHARED_HEADER + mv + defs + '\n' + (defines.MULTIVIEW ? '#define VIEW_ID int(gl_ViewID_OVR)\n' : '#define VIEW_ID 0\n');
+    const SHARED_HEADER = '#version 300 es\n' + mv + PRECISION;
+    const vsHead = SHARED_HEADER + defs + '\n' + (defines.MULTIVIEW ? 'layout(num_views = 2) in;\n#define VIEW_ID int(gl_ViewID_OVR)\n' : '#define VIEW_ID 0\n');
+    const fsHead = SHARED_HEADER + defs + '\n' + (defines.MULTIVIEW ? '#define VIEW_ID int(gl_ViewID_OVR)\n' : '#define VIEW_ID 0\n');
     const p = new Program(this.gl, name, vsHead + this.expand(vertex), fsHead + this.expand(fragment));
     this.programs.set(key, p);
     return p;

@@ -414,6 +414,7 @@ function step(dt: number, inXR: boolean): void {
   fps += (1 / Math.max(dt, 1e-3) - fps) * 0.05;
   const running = started && !menuOpen && !paused;
   renderer.time += dt;
+  renderer.frameDt = dt;
 
   controls.brake = 0;
   if (inXR) {
@@ -623,6 +624,49 @@ function devView(x: number, y: number, z: number, headingDeg: number, mode: 'cha
   renderer.terrainBudget = 6000;
 }
 
+/** Dev helper: free camera (degrees), renders one frame. */
+function devLook(x: number, y: number, z: number, yawDeg: number, pitchDeg: number, time?: 'day' | 'evening' | 'night', look?: Settings['sky']): void {
+  if (time) settings.time = time;
+  if (look) settings.sky = look;
+  applyLive();
+  devView(x, Math.max(y - 30, 5), z + 60, yawDeg, 'chase');
+  camera.position.set(x, y, z);
+  camera.up.set(0, 1, 0);
+  camera.rotation.set((pitchDeg * Math.PI) / 180, (yawDeg * Math.PI) / 180, 0, 'YXZ');
+  const [w, h] = canvasSize();
+  renderer.terrainBudget = Infinity;
+  renderer.render([desktopView(w, h)], sky.env, [scene], { kind: 'canvas', width: w, height: h }, vignette.effects);
+  renderer.terrainBudget = 6000;
+}
+
+/** Dev helper: renders the current view through the multiview VR path into a test texture array and shows one eye. */
+function devMultiview(eye = 0, inline = true): string {
+  const gl = renderer.gl;
+  const W = 640;
+  const H = 640;
+  const tex = gl.createTexture()!;
+  gl.bindTexture(gl.TEXTURE_2D_ARRAY, tex);
+  gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, W, H, 2);
+  const ipd = 0.064;
+  const base = desktopView(W, H);
+  const views = [-1, 1].map((s) => {
+    const m = new THREE.Matrix4().fromArray(Array.from(base.matrix)).multiply(new THREE.Matrix4().makeTranslation((s * ipd) / 2, 0, 0));
+    return { matrix: m.elements, fov: { left: 1.0, right: 0.9, up: 0.95, down: 1.1 } };
+  });
+  renderer.render(views, sky.env, [scene], inline ? { kind: 'xr-multiview', color: tex, width: W, height: H } : { kind: 'xr-views', framebuffer: null, viewports: [[0, 0, W, H], [W, 0, W, H]] }, vignette.effects);
+  const err = gl.getError();
+  if (inline) {
+    const fb = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, fb);
+    gl.framebufferTextureLayer(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, tex, 0, eye);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+    gl.blitFramebuffer(0, 0, W, H, 0, 0, W, H, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+  }
+  return `gl error ${err}`;
+}
+
 if (import.meta.env.DEV)
-  Object.assign(window, { sim: { devView, useAircraft, renderer, scene, camera, sky, variants, aircraft, controls, actions, cameraRig, missions, settings, weather, OPTIONS, applyLive, startFlight } });
+  Object.assign(window, {
+    devMultiview,
+    devLook, sim: { devView, useAircraft, renderer, scene, camera, sky, variants, aircraft, controls, actions, cameraRig, missions, settings, weather, OPTIONS, applyLive, startFlight } });
 (window as unknown as { ready: boolean }).ready = true;

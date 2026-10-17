@@ -2,12 +2,14 @@ import * as THREE from 'three';
 import { BLOCK, type Defines, Device, type Program, renderbuffer, Target, type Texture, UniformBuffer } from '../gl/device';
 import { type Fov, invert, lookDir, multiply, ortho, projection } from '../math';
 import { atmosphereCommon, atmosphereLookup } from '../shaders/atmosphere';
+import { cloudLookup } from '../shaders/clouds';
 import { FRAME, frame, fullscreenVS, noise, output, tonemap } from '../shaders/common';
 import { lighting, shadows } from '../shaders/lighting';
 import { compositeFS, downFS, upFS, visionFS, visionVS } from '../shaders/post';
 import { skyFS, skyVS } from '../shaders/sky';
 import { waterFS, waterVS } from '../shaders/water';
 import { Atmosphere, type AtmosphereState } from './atmosphere';
+import { type CloudSettings, Clouds } from './clouds';
 import { MeshRenderer } from './meshes';
 import { TerrainClipmap } from './terrain';
 
@@ -60,6 +62,7 @@ interface ScenePrograms {
   water: Program;
   sky: Program;
   vision: Program;
+  clouds: Program;
   mesh: { plain: Program; instanced: Program };
   meshShadow: { plain: Program; instanced: Program };
 }
@@ -74,6 +77,12 @@ export class Renderer {
   readonly atmosphere: Atmosphere;
   readonly terrain: TerrainClipmap;
   readonly meshes: MeshRenderer;
+  readonly clouds: Clouds;
+  cloudsEnabled = true;
+  cloudDesktop: CloudSettings = { scale: 0.5, steps: 56, lightSteps: 5, range: 45000 };
+  cloudXR: CloudSettings = { scale: 0.3, steps: 22, lightSteps: 3, range: 25000 };
+  /** accumulated cloud drift (m) */
+  private readonly drift = [0, 0];
   readonly frameUbo: UniformBuffer;
   private readonly shadowUbo: UniformBuffer;
   private readonly emptyVao: WebGLVertexArrayObject;
@@ -98,6 +107,8 @@ export class Renderer {
   /** terrain samples the clipmap may compute per frame */
   terrainBudget = 6000;
   time = 0;
+  /** seconds since the last frame (cloud drift) */
+  frameDt = 0;
   readonly stats = { draws: 0 };
 
   constructor(canvas: HTMLCanvasElement) {
@@ -113,6 +124,7 @@ export class Renderer {
     dev.addInclude('atmosphere-lookup', atmosphereLookup);
     dev.addInclude('shadows', shadows);
     dev.addInclude('lighting', lighting);
+    dev.addInclude('clouds', cloudLookup);
 
     this.frameUbo = new UniformBuffer(gl, FRAME.size, BLOCK.frame);
     this.shadowUbo = new UniformBuffer(gl, FRAME.size, BLOCK.frame);
@@ -120,6 +132,7 @@ export class Renderer {
     this.atmosphere = new Atmosphere(dev);
     this.terrain = new TerrainClipmap(dev);
     this.meshes = new MeshRenderer(dev);
+    this.clouds = new Clouds(dev);
 
     this.shadowSize = 2048;
     this.shadowMap = dev.textureArray({ width: this.shadowSize, height: this.shadowSize, layers: 3, format: gl.DEPTH_COMPONENT32F, compare: true });
@@ -178,6 +191,7 @@ export class Renderer {
         water: this.dev.program('water', waterVS, waterFS, defines),
         sky: this.dev.program('sky', skyVS, skyFS, defines),
         vision: this.dev.program('vision', visionVS, visionFS, defines),
+        clouds: this.clouds.programs({ MULTIVIEW: defines.MULTIVIEW, REVERSED_Z: defines.REVERSED_Z }),
         mesh: { plain: m.plain, instanced: m.instanced },
         meshShadow: { plain: m.shadow, instanced: m.shadowInstanced },
       };
@@ -200,6 +214,8 @@ export class Renderer {
 
     // floating origin: the centre between the eyes
     this.origin.fill(0);
+    this.drift[0] += 6 * this.frameDt;
+    this.drift[1] += 2.5 * this.frameDt;
     for (const v of views) for (let k = 0; k < 3; k++) this.origin[k] += v.matrix[12 + k] / views.length;
     const o = this.origin;
     const camWorld = new THREE.Vector3(o[0], o[1], o[2]);
@@ -245,6 +261,8 @@ export class Renderer {
     f.set([env.overcast, env.rain, env.visibility, env.cloudBase], FRAME.weather);
     f.set([night, env.cloudTop, env.coverage, this.time * 0.1], FRAME.misc);
     f.set([CASCADES[0], CASCADES[1], CASCADES[2], 1 / this.shadowSize], FRAME.cascade);
+    f.set([this.drift[0], this.drift[1], 0, 0], FRAME.wind);
+    f.set([o[0], o[1], o[2], 0], FRAME.originAbs);
     // frame.origin.w is the origin height: heights in shaders are rel.y + origin.w
 
     // ---- atmosphere LUTs -----------------------------------------------------------------------------
@@ -271,19 +289,32 @@ export class Renderer {
     for (let i = 0; i < 3; i++) f.set(this.shadowMats[i], FRAME.shadowMat + i * 16);
 
     // ---- main pass ------------------------------------------------------------------------------------------
-    const drawScene = (w: number, h: number) => {
+    const cloudsOn = this.cloudsEnabled && env.coverage > 0.02;
+    const cs = out.kind === 'canvas' ? this.cloudDesktop : this.cloudXR;
+    const cloudDensity = env.overcast > 0.5 ? 1.6 : 1;
+    const drawClouds = (w: number, h: number, mv: boolean) => {
+      if (!cloudsOn) return;
+      this.clouds.ensure(Math.max(1, Math.round(w * cs.scale)), Math.max(1, Math.round(h * cs.scale)), mv);
+      this.frameUbo.flush();
+      gl.bindVertexArray(this.emptyVao);
+      this.clouds.render(progs.clouds, cs, env.cloudBase, env.cloudTop, env.coverage, cloudDensity, mv, (p) => this.atmosphere.bind(p));
+    };
+    const drawScene = (w: number, h: number, x = 0, y = 0) => {
       f[FRAME.viewport] = w;
       f[FRAME.viewport + 1] = h;
       f[FRAME.viewport + 2] = 1 / w;
       f[FRAME.viewport + 3] = 1 / h;
+      f[FRAME.viewOffset] = x;
+      f[FRAME.viewOffset + 1] = y;
       this.meshes.pointScale = h / 1000;
       this.frameUbo.flush();
-      this.drawScene(progs, env, reversed);
+      this.drawScene(progs, env, reversed, cloudsOn);
       this.drawVision(progs.vision, vision, views);
     };
 
     if (out.kind === 'canvas') {
       const t = this.ensureHdr(out.width, out.height);
+      drawClouds(t.w, t.h, false);
       t.msaa.bind();
       drawScene(t.w, t.h);
       // resolve MSAA, then bloom and composite to the canvas
@@ -292,13 +323,13 @@ export class Renderer {
       gl.blitFramebuffer(0, 0, t.w, t.h, 0, 0, t.w, t.h, gl.COLOR_BUFFER_BIT, gl.NEAREST);
       this.postProcess(t, out.width, out.height, env);
     } else if (out.kind === 'xr-multiview') {
+      drawClouds(out.width, out.height, true);
       const fb = this.xrFramebuffer(out.color, out.width, out.height);
       gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
       gl.viewport(0, 0, out.width, out.height);
       drawScene(out.width, out.height);
     } else {
       // one pass per eye: view 0 of the frame block is rewritten before each
-      gl.bindFramebuffer(gl.FRAMEBUFFER, out.framebuffer);
       const eyes = out.viewports.length;
       const saved = f.slice(0, FRAME.size);
       for (let i = 0; i < eyes; i++) {
@@ -306,10 +337,12 @@ export class Renderer {
         f.set(saved.subarray(FRAME.invViewProj + i * 16, FRAME.invViewProj + i * 16 + 16), FRAME.invViewProj);
         f.set(saved.subarray(FRAME.eye + i * 4, FRAME.eye + i * 4 + 4), FRAME.eye);
         const [x, y, w, h] = out.viewports[i];
+        drawClouds(w, h, false);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, out.framebuffer);
         gl.viewport(x, y, w, h);
         gl.enable(gl.SCISSOR_TEST);
         gl.scissor(x, y, w, h);
-        drawScene(w, h);
+        drawScene(w, h, x, y);
         gl.disable(gl.SCISSOR_TEST);
       }
       f.set(saved);
@@ -317,7 +350,7 @@ export class Renderer {
     gl.bindVertexArray(null);
   }
 
-  private drawScene(progs: ScenePrograms, env: Environment, reversed: boolean): void {
+  private drawScene(progs: ScenePrograms, env: Environment, reversed: boolean, cloudsOn: boolean): void {
     const gl = this.gl;
     gl.depthMask(true);
     gl.clearDepth(reversed ? 0 : 1);
@@ -330,8 +363,13 @@ export class Renderer {
     gl.disable(gl.BLEND);
     const o = this.origin;
 
+    const bindClouds = (p: Program) => {
+      p.f1('u_cloudsOn', cloudsOn ? 1 : 0);
+      if (this.clouds.light) p.tex('u_cloudLight', this.clouds.light).tex('u_cloudDepth', this.clouds.depth);
+    };
     const bindLit = (p: Program) => {
       this.atmosphere.bind(p);
+      bindClouds(p);
       p.tex('u_shadowMap', this.shadowMap).tex('u_terrainShadow', this.terrainShadow).m4('u_terrainShadowMat', this.terrainShadowMat).f1('u_shadowsOn', this.shadowsEnabled ? 1 : 0).f1('u_debugShadow', this.debugShadow);
     };
 
@@ -372,6 +410,7 @@ export class Renderer {
     gl.depthMask(false);
     const s = progs.sky.use();
     this.atmosphere.bind(s);
+    bindClouds(s);
     gl.bindVertexArray(this.emptyVao);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.depthMask(true);

@@ -17,6 +17,7 @@ export const skyFS = /* glsl */ `
 #include <atmosphere-common>
 #include <atmosphere-lookup>
 #include <noise>
+#include <clouds>
 #include <output>
 in vec2 v_ndc;
 
@@ -60,6 +61,11 @@ void main() {
     // milky way band
     float band = exp(-pow(dot(d, normalize(vec3(0.3, 0.55, -0.78))) * 4.0, 2.0));
     c += vec3(0.55, 0.6, 0.75) * band * fbm2(d.xz * 9.0 + d.y * 3.0, 4) * night * 0.004 * (1.0 - u_weather.x) / max(u_sunColor.w, 1e-3);
+  }
+  if (u_cloudsOn > 0.5) {
+    vec2 uv = (gl_FragCoord.xy - u_viewOffset.xy) * u_viewport.zw;
+    vec4 cl = texture(u_cloudLight, vec3(uv, float(VIEW_ID)));
+    c = c * cl.a + cl.rgb;
   }
   writeColor(c, 1.0);
 }

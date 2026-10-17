@@ -18,6 +18,7 @@ export const waterFS = /* glsl */ `
 #include <noise>
 #include <shadows>
 #include <lighting>
+#include <clouds>
 #include <output>
 
 uniform highp sampler2DArray u_height;
@@ -108,6 +109,6 @@ void main() {
   foam += smoothstep(0.55, 0.9, length(slope) * 3.0) * fade * u_waves * 0.5;
   vec3 c = mix(body, refl, fres) + glint;
   c = mix(c, lightIn * 0.25, clamp(foam, 0.0, 1.0) * 0.8);
-  writeColor(applyAerial(c, v_rel), 1.0);
+  writeColor(applyClouds(applyAerial(c, v_rel), v_rel), 1.0);
 }
 `;

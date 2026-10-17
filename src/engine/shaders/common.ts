@@ -16,6 +16,8 @@ layout(std140) uniform Frame {
   vec4 u_cascade;       // xyz: cascade far distances; w: 1 / shadow map size
   vec4 u_viewport;      // width, height, 1/width, 1/height
   vec4 u_wind;          // xy: cloud drift (m), zw: water wave drift
+  vec4 u_originAbs;     // floating origin in world metres (float32: fine for large-scale noise)
+  vec4 u_viewOffset;    // xy: viewport origin of this view in the framebuffer (pixels)
 };
 
 vec3 eyePos() { return u_eye[VIEW_ID].xyz; }
@@ -35,7 +37,9 @@ export const FRAME = {
   cascade: 144,
   viewport: 148,
   wind: 152,
-  size: 156,
+  originAbs: 156,
+  viewOffset: 160,
+  size: 164,
 };
 
 /** Colour handling: filmic tonemapping (AgX) and output encoding. */

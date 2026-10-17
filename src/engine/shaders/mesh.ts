@@ -50,6 +50,7 @@ export const meshFS = /* glsl */ `
 #include <atmosphere-lookup>
 #include <shadows>
 #include <lighting>
+#include <clouds>
 #include <output>
 
 uniform sampler2D u_map;
@@ -96,7 +97,7 @@ void main() {
     s.sunVisibility = u_receiveShadow > 0.5 ? sunShadow(v_rel, n) : 1.0;
     c = shade(s, v_rel, u_origin.w + v_rel.y);
   }
-  if (u_fogged > 0.5) c = applyAerial(c, v_rel);
+  if (u_fogged > 0.5) c = applyClouds(applyAerial(c, v_rel), v_rel);
   writeColor(c, base.a);
 }
 `;

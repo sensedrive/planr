@@ -62,6 +62,7 @@ export const terrainFS = /* glsl */ `
 #include <noise>
 #include <shadows>
 #include <lighting>
+#include <clouds>
 #include <output>
 
 uniform highp sampler2DArray u_color;
@@ -115,7 +116,7 @@ void main() {
   s.occlusion = 1.0;
   s.sunVisibility = sunShadow(v_rel, v_normal);
   vec3 c = shade(s, v_rel, v_height);
-  writeColor(applyAerial(c, v_rel), 1.0);
+  writeColor(applyClouds(applyAerial(c, v_rel), v_rel), 1.0);
 }
 `;
 
