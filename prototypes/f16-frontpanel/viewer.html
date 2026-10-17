@@ -1,0 +1,188 @@
+<title>F-16 Frontpanel Prototyp</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: Vollbild-3D-Ansicht aus dem Pilotensitz, Bedienleiste unten schwebend. Bewusst nur dunkel (Cockpit). */
+  :root {
+    --bg: #0b0d0e;
+    --panel: rgba(20, 23, 25, 0.86);
+    --line: #2b3134;
+    --fg: #e4e6e1;
+    --muted: #8d9693;
+    --accent: #7dff9c; /* Grün der F-16-Anzeigen */
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    --sans: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+    color-scheme: dark;
+  }
+  html, body { height: 100%; }
+  body { background: var(--bg); color: var(--fg); font-family: var(--sans); overflow: hidden; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  .hud {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    padding-block: 10px calc(10px + env(safe-area-inset-bottom, 0px));
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center;
+    background: var(--panel); border-top: 1px solid var(--line); backdrop-filter: blur(6px);
+  }
+  .tag { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+  .group { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  button {
+    font: 600 13px var(--sans); letter-spacing: 0.04em; color: var(--fg);
+    background: #1b1f21; border: 1px solid var(--line); border-radius: 3px; padding: 7px 11px; cursor: pointer;
+  }
+  button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  label { font-size: 13px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  input[type="range"] { width: 120px; accent-color: var(--accent); }
+  .stats { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-left: auto; font-variant-numeric: tabular-nums; }
+  .note {
+    position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px));
+    max-width: min(420px, calc(100% - 32px)); font-size: 12px; line-height: 1.45; color: var(--muted);
+    background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 8px 10px;
+  }
+  .note b { color: var(--fg); }
+  #loading { position: fixed; inset: 0; display: grid; place-items: center; font-family: var(--mono); color: var(--accent); pointer-events: none; }
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans+Condensed:wght@400;600&display=swap">
+
+<div id="loading">Lade Frontpanel …</div>
+<div class="note"><b>Prototyp, Ticket #10.</b> F-16C Block 50 Frontpanel, komplett per Blender-Skript erzeugt, AO gebacken. Ansicht vom Augpunkt (0,72 m vor dem Panel). Ziehen dreht den Blick, Mausrad zoomt.</div>
+<div class="hud">
+  <span class="tag">F-16C Blk 50 · Prototyp</span>
+  <div class="group">
+    <button id="ao" aria-pressed="true">AO</button>
+    <button id="night" aria-pressed="false">Nacht</button>
+    <button id="seat">Sitzposition</button>
+  </div>
+  <label for="sun">Sonne <input id="sun" type="range" min="0" max="360" value="200"></label>
+  <span class="stats" id="stats">–</span>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { VRButton } from 'three/addons/webxr/VRButton.js';
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.xr.enabled = true;
+document.body.prepend(renderer.domElement);
+navigator.xr?.isSessionSupported('immersive-vr').then((ok) => {
+  if (ok) document.body.appendChild(VRButton.createButton(renderer));
+}).catch(() => { /* kein WebXR im Rahmen */ });
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87a7c4);
+const pmrem = new THREE.PMREMGenerator(renderer);
+const envTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environment = envTex;
+
+// Augpunkt aus layout.py (Blender x, y, z) -> glTF (x, z, -y)
+const EYE = new THREE.Vector3(0, 0.44, 0.72);
+const TARGET = new THREE.Vector3(0, 0.06, 0);
+const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.01, 50);
+camera.position.copy(EYE);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.copy(TARGET);
+controls.enableDamping = true;
+controls.minDistance = 0.15;
+controls.maxDistance = 1.6;
+controls.update();
+window.__view = { camera, controls };
+
+const hemi = new THREE.HemisphereLight(0xbcd4f0, 0x1a1c1e, 0.35);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff4e2, 3.2);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -0.6, right: 0.6, top: 0.6, bottom: -0.6, near: 0.1, far: 6 });
+sun.shadow.bias = -0.0004;
+sun.shadow.normalBias = 0.002;
+scene.add(sun, sun.target);
+const flood = new THREE.PointLight(0xd8ffe0, 0, 2.5, 2);
+flood.position.set(0, 0.38, 0.35);
+scene.add(flood);
+
+function placeSun(deg) {
+  const a = THREE.MathUtils.degToRad(deg);
+  sun.position.set(Math.sin(a) * 2, 2.2, Math.cos(a) * 2);
+}
+placeSun(200);
+
+const stats = document.getElementById('stats');
+const aoMaps = new Map();
+let atlas = null;
+const displays = [];
+// Artefakt-Hosting liefert kein .glb aus, daher liegt das GLB base64-kodiert als Text daneben
+fetch('f16_frontpanel.glb.txt').then((r) => r.text()).then((b64) => {
+  const bin = Uint8Array.from(atob(b64.trim()), (c) => c.charCodeAt(0));
+  new GLTFLoader().parse(bin.buffer, '', onModel, onError);
+}).catch(onError);
+function onError(err) { document.getElementById('loading').textContent = 'Modell konnte nicht geladen werden: ' + (err.message || err); }
+function onModel(gltf) {
+  const root = gltf.scene;
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    const m = o.material;
+    if (m.aoMap) aoMaps.set(m, m.aoMap);
+    if (m.name === 'FrontAtlas') { atlas = m; m.emissive.set(0xcff5d8); m.emissiveIntensity = 0; }
+    if (/page$/.test(m.name)) displays.push(m);
+    if (!m.transparent) { o.castShadow = true; o.receiveShadow = true; }
+    else { m.depthWrite = false; m.envMapIntensity = 1.6; }
+  });
+  scene.add(root);
+  document.getElementById('loading').remove();
+  let tris = 0;
+  root.traverse((o) => { if (o.isMesh) tris += o.geometry.index ? o.geometry.index.count / 3 : o.geometry.attributes.position.count / 3; });
+  window.__tris = tris;
+  stats.textContent = `${Math.round(tris / 1000)}k Dreiecke`;
+}
+
+const aoBtn = document.getElementById('ao');
+aoBtn.onclick = () => {
+  const on = aoBtn.getAttribute('aria-pressed') !== 'true';
+  aoBtn.setAttribute('aria-pressed', on);
+  for (const [m, t] of aoMaps) { m.aoMap = on ? t : null; m.needsUpdate = true; }
+};
+const nightBtn = document.getElementById('night');
+nightBtn.onclick = () => {
+  const on = nightBtn.getAttribute('aria-pressed') !== 'true';
+  nightBtn.setAttribute('aria-pressed', on);
+  scene.background.set(on ? 0x05070c : 0x87a7c4);
+  scene.environmentIntensity = on ? 0.03 : 1;
+  sun.intensity = on ? 0 : 3.2;
+  hemi.intensity = on ? 0.02 : 0.35;
+  flood.intensity = on ? 0.06 : 0;
+  if (atlas) atlas.emissiveIntensity = on ? 0.9 : 0;
+  for (const d of displays) d.emissiveIntensity = on ? 0.55 : 1;
+};
+document.getElementById('seat').onclick = () => { camera.position.copy(EYE); controls.target.copy(TARGET); controls.update(); };
+document.getElementById('sun').oninput = (e) => placeSun(+e.target.value);
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+let frame = 0;
+renderer.setAnimationLoop(() => {
+  controls.update();
+  renderer.render(scene, camera);
+  if (++frame % 30 === 0 && window.__tris) {
+    stats.textContent = `${Math.round(window.__tris / 1000)}k Dreiecke · ${renderer.info.render.calls} Draw Calls`;
+  }
+});
+</script>
