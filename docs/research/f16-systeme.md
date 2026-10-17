@@ -1,6 +1,16 @@
-# Recherche: Bedienelemente und Systeme eines F-16C Block 50/52
+# Recherche: Bedienelemente und Systeme eines F-16C Block 52
 
-Stand 2026-10-17. Frage aus Issue #15: Was braucht ein voll funktionsfähiges F-16C-Block-50/52-Cockpit, in dem jeder Schalter ein simuliertes System steuert? Teil 1 ist ein Inventar der Bedienelemente, Panel für Panel. Teil 2 beschreibt je System, was ein Sim nachbilden muss und wovon es abhängt. Teil 3 schätzt den Umfang. Baut auf [f16-cockpit-referenzen.md](f16-cockpit-referenzen.md) auf (Lage und Maße der Panels).
+Stand 2026-10-17, überarbeitet für Issue #20 (Umstellung auf Block 52, Nachrecherche zu S1 Kapitel 6 ff.). Ursprüngliche Frage aus Issue #15: Was braucht ein voll funktionsfähiges F-16C-Cockpit, in dem jeder Schalter ein simuliertes System steuert? Teil 1 ist ein Inventar der Bedienelemente, Panel für Panel. Teil 2 beschreibt je System, was ein Sim nachbilden muss und wovon es abhängt. Teil 3 schätzt den Umfang. Baut auf [f16-cockpit-referenzen.md](f16-cockpit-referenzen.md) auf (Lage und Maße der Panels).
+
+**Projektentscheidung:** planr bildet den **Block 52** mit Triebwerk **P&W F100-PW-229** nach. Wo der Block 50 (GE F110-GE-129) abweicht, steht das als Vermerk „Block 50:“ dabei.
+
+## Änderungen durch #20
+
+- **Block 52 statt Block 50:** Triebwerksabschnitt (2.5), Triebwerkspanel (1.1), Caution-Feld EEC/BUC statt SEC (2.13) und Kaltstart (2.15) auf F100-PW-229 umgestellt; Block-50-Angaben (ENG CONT, AB RESET, SEC-Check, GE129-Leerlaufwerte) ersetzt bzw. als Unterschied vermerkt.
+- **Korrektur zu S1:** Das Triebwerkskapitel von S1 beschreibt nicht das GE129, sondern das **F100-PW-220/220E** mit DEEC/SEC; die Caution-Leuchten EEC und BUC sind dort als „deaktiviert“ geführt. Die bisherige Zuordnung „Block 50 = DEEC/SEC laut S1“ war darum falsch zugeordnet. Siehe 2.5.
+- **S1 Kapitel 6 ff.:** weiter nicht als Volltext lesbar (Download per curl vom Proxy abgewiesen, Abrufwerkzeug endet in Kapitel 5). Ausgewertet wurde das **Inhaltsverzeichnis** dieser Kapitel; es belegt Aufbau, Bedienelemente und Leuchten (z. B. Down-Permission-Taste, Spin-Down-Bremsung, vier FLCS-Limiter, Low-Speed-Warnton), aber keine Funktionsbeschreibungen oder Buszuordnungen.
+- **Neue Quellen:** S9 (QuebecAirForce, BMS-Kaltstart Block 52/PW-229), S10 (BMS-Avionikhandbuch Dash-34, Inhaltsverzeichnis). Einige [Sim-Wissen]-Stellen sind dadurch belegt (MFD-Formate, Ruderpedale mit Fußbremsen, Leerlaufwerte PW-229), die übrigen bleiben gekennzeichnet.
+- Was nicht ging und warum: Abschnitt „Offene Punkte“.
 
 ## Kennzeichnung und Quellen
 
@@ -10,23 +20,25 @@ Alle Texte sind zusammengefasst, nichts wörtlich übernommen.
 
 | Id | Quelle | Was sie liefert | Vertrauen |
 |---|---|---|---|
-| S1 | [Falcon BMS: TO 1F-16CM/AM-1 BMS](https://cdn.falcon-bms.com/docs/4.37/TO%201F-16CMAM-1%20BMS.pdf) (Version 4.37, „Blocks 50, 52“) | Triebwerk, JFS, Kraftstoff, Luftbetankung, Anfang ECS (Kapitel 1–5) | hoch (an das echte -1 angelehnt). **Einschränkung:** Mein Abrufwerkzeug liefert nur die ersten ca. 115 000 Zeichen; Kapitel 6 ff. (Elektrik, Hydraulik, Fahrwerk, FLCS, Licht, Sauerstoff, Normal Procedures) waren nicht lesbar. Ein direkter Download aus dem Container wird vom Proxy blockiert (403). |
+| S1 | [Falcon BMS: TO 1F-16CM/AM-1 BMS](https://cdn.falcon-bms.com/docs/4.37/TO%201F-16CMAM-1%20BMS.pdf) (Version 4.37.4, „Blocks 50, 52, 52+ and MLU“) | Triebwerk (beschrieben für **F100-PW-220/220E**), JFS, Kraftstoff, Luftbetankung, Anfang ECS (Kapitel 1–5); dazu das Inhaltsverzeichnis aller Kapitel | hoch (an das echte -1 angelehnt). **Einschränkung:** Das Abrufwerkzeug liefert nur die ersten ca. 115 000 Zeichen (bis Seite 62, Anfang Kapitel 5); Kapitel 6 ff. (Elektrik, Hydraulik, Fahrwerk, FLCS, Licht, Sauerstoff, Normal Procedures) sind nur über das Inhaltsverzeichnis greifbar. Download per curl: der Proxy weist `cdn.falcon-bms.com` per Richtlinie ab (403, Stand #20 erneut geprüft). |
 | S2 | xflight.de (Martin Schmitt), Panel-Unterseiten, z. B. [Elec](https://www.xflight.de/pe_org_par_lfc_elec.htm), [Engine Start](https://www.xflight.de/pe_org_par_lfc_engstart.htm), [Flt Control](https://www.xflight.de/pe_org_par_lfc_fltctrl.htm), [Caution Panel](https://www.xflight.de/pe_org_par_rxc_wpanel.htm); vollständige Liste unter „Quellen“ | je Panel: Schalter, Stellungen, Funktion, Leuchten; teils nach Block getrennt | hoch für Schalterstellungen; einzelne Funktionstexte sind offenkundig falsch oder mit „?“ markiert (vermerke ich) |
 | S3 | [DCS-BIOS, Modul F-16C_50.lua](https://raw.githubusercontent.com/DCS-Skunkworks/dcs-bios/main/Scripts/DCS-BIOS/lib/modules/aircraft_modules/F-16C_50.lua) | maschinenlesbare Liste aller klickbaren Elemente und Leuchten des DCS-F-16C-Block-50 mit Stellungen | hoch als **Inventar** (so viel Klickbares hat ein ausgereifter Sim); bildet DCS ab, nicht das echte Flugzeug |
 | S4 | Brainscape-Lernkarten „F-16“ (Nutzer-Deck): [Electrical](https://brainscape.com/flashcards/electrical-system-7636120/packs/12578530), [Hydraulic](https://www.brainscape.com/flashcards/hydraulic-system-7632457/packs/12578530), [EPU](https://www.brainscape.com/flashcards/epu-7634205/packs/12578530), [Fuel](https://www.brainscape.com/flashcards/fuel-system-7632801/packs/12578530), [FLCS](https://www.brainscape.com/flashcards/flcs-7642762/packs/12578530), [ECS](https://www.brainscape.com/flashcards/ecs-7642667/packs/12578530), [Engine](https://www.brainscape.com/flashcards/engine-7638700/packs/12578530) | Zahlen und Logik, offensichtlich aus einer echten Ausbildung abgeschrieben | **mittel/niedrig**: inoffiziell, und das Deck beschreibt ein **älteres** Muster (Triebwerk PW220, FLCS-Leuchten PRY/SERVO/DUAL FC = Block 25–42). Nur übernehmen, wo es zum Block 50 passt |
 | S5 | [47th Fighter Squadron: BMS-Checkliste kurz V7](https://47df.com/downloads/Taktik_Page/47th_BMS_Checklist_short_V7.pdf) (BMS 4.33, GE129) | Kaltstart Schritt für Schritt mit erwarteten Leuchten und Grenzwerten | mittel: Sim-Checkliste, auf dem BMS-Dash-1 aufgebaut |
 | S6 | [Falcon-BMS-Forum: Master Caution/Elect systm/EPU](https://forum.falcon-bms.com/topic/16854/master-caution-elect-systm-epu) | ELEC SYS, EPU-Anlauflogik am Boden | mittel (Forum, zitiert -1) |
 | S7 | [BMS-Wiki (biligame), Kapitel 9 „Störungen im Flug“](https://wiki.biligame.com/falconbms/9_%E9%A3%9E%E8%A1%8C%E4%B8%AD%E6%95%85%E9%9A%9C) | Ablauf eines Generatorausfalls in BMS, was ausfällt | mittel (Sim-Training) |
-| S8 | f-16.net-Foren: [Generators in the F-16](https://www.f-16.net/forum/viewtopic.php?p=8223), [Main PWR on the F-16](https://www.f-16.net/forum/viewtopic.php?p=186657) | Generatorleistung, Stromübergabe beim Start | niedrig/mittel (Forum) |
+| S8 | f-16.net-Foren: [Generators in the F-16](https://www.f-16.net/forum/viewtopic.php?p=8223), [Main PWR on the F-16](https://www.f-16.net/forum/viewtopic.php?p=186657) (auch [p=186672](https://www.f-16.net/forum/viewtopic.php?p=186672)) | Generatorleistung, Stromübergabe beim Start | niedrig/mittel (Forum) |
+| S9 | [QuebecAirForce: QAF Ramp Start BMS 4.37, Kurzfassung](https://www.quebecairforce.com/img/Sim_BMS/Ref/Procedures/Ramp_Start/BMS437/QAF_Ramp_Start_437_Sommaire.pdf) (v4.37.5.0, 2024-12-17, F-16CM-52 mit PW-229) | Kaltstart Block 52 in BMS mit Leerlaufwerten und Aufwärmzeit der MFDs | mittel: Sim-Checkliste einer virtuellen Staffel; Textauszug aus dem PDF war teils durcheinander |
+| S10 | [Falcon BMS: TO 1F-16CM/AM-34-1-1 BMS](https://cdn.falcon-bms.com/docs/4.37/TO%201F-16CMAM-34-1-1%20BMS.pdf) (Avionik, 4.37) | nur **Inhaltsverzeichnis** lesbar: MFD-Formate, EGI-Ausrichtungsarten, IFF-Caution als eigener Abschnitt | hoch für die Gliederung, ohne Inhalt |
 
-Nicht genutzt: [flightchecklist.app](https://flightchecklist.app/bms/f-16c-block52-bms) (enthält offensichtliche Fehler, z. B. Schwenkflügel). Das DCS-Handbuch und das BMS-Training-Manual ließen sich von hier nicht abrufen. Die Kapitel 6 ff. von S1 sind der wichtigste offene Punkt (siehe Ende).
+Nicht genutzt: [flightchecklist.app](https://flightchecklist.app/bms/f-16c-block52-bms) (enthält offensichtliche Fehler, z. B. Schwenkflügel). **Bewusst nicht genutzt:** im Netz kursierende Kopien echter Flughandbücher (z. B. ein griechisches T.O. GR1F-16CJ-1 für Block 50/52+ auf publicintelligence.net, Kopien auf studylib/Scribd); sie tragen Verbreitungsbeschränkungen (nur militärische Nutzung, Weitergabe nur mit Genehmigung) und gehören nicht in ein öffentliches Repo. Nicht abrufbar (Abruffehler oder Download gesperrt): DCS-F-16C-Handbuch, Chuck's DCS-F-16C-Guide, BMS-Training-Manual 4.37 und 4.38, BMS-Forum (robots-Sperre), Scribd (JavaScript-Sperre). Die Kapitel 6 ff. von S1 bleiben der wichtigste offene Punkt (siehe Ende).
 
 ## Kurzfassung
 
 1. **Umfang:** Ein vollständiges Cockpit hat rund **290–320 Bedienelemente** (davon 40 MFD-Tasten, ca. 33 am ICP, ca. 17 an Stick und Throttle mit ca. 45 Einzelfunktionen) und **rund 150 Leuchten/Anzeigen** (32 Felder Caution Panel, 11 Eyebrow-Leuchten, 9 Elec-Leuchten, RWR/ECM/CMDS-Leuchten). DCS-BIOS (S3) listet allein ca. 280 klickbare Elemente.
-2. **Block 50 oder 52 entscheiden:** Die Blöcke unterscheiden sich im Cockpit fast nur am Triebwerkspanel (Block 50 GE F110-GE-129: ENG CONT PRI/SEC; Block 52 P&W F100-PW-229: EEC/BUC, STARTING FUEL, MAX POWER) und an zwei Caution-Feldern (SEC bzw. EEC/BUC) [belegt S2, S1]. **Empfehlung: Block 50**, weil DCS (S3) und die meisten Checklisten ihn abbilden.
+2. **Block 52 (entschieden):** Die Blöcke unterscheiden sich im Cockpit fast nur am Triebwerkspanel (Block 52 P&W F100-PW-229: EEC/BUC, STARTING FUEL, MAX POWER wirksam; Block 50 GE F110-GE-129: ENG CONT PRI/SEC, AB RESET/ENG DATA) und an den Caution-Feldern EEC/BUC bzw. SEC [belegt S2]. Das Projekt hat sich für **Block 52** entschieden. Achtung: DCS (S3) bildet Block 50 ab, und BMS (S1) beschreibt die Triebwerksregelung nach dem Muster des PW-220 (DEEC/SEC) und führt EEC/BUC als deaktiviert. Für das PW-229-Verhalten gibt es darum nur wenige belastbare Angaben (siehe 2.5).
 3. **Das Herz ist die Energieversorgung:** Fast jedes System hängt an einem Bus. Ein Sim braucht ein Busmodell mit vier Stufen (Batterie, Standby-Generator, Hauptgenerator, EPU) und je Verbraucher einen Bus. Danach kommen Hydraulik A/B (beide FLCS, B zusätzlich Fahrwerk, Bremsen, NWS, JFS-Speicher) und der Kraftstoff (zwei Systeme vorn/hinten, Reservoirs) [belegt S1, S4].
-4. **Kaltstart** in Kurzform: MAIN PWR BATT → FLCS-Power-Test → MAIN PWR → JFS START 2 → Throttle IDLE ab 20 % → JFS aus bei ca. 50–55 % → Avionik ein → INS ausrichten → FLCS BIT → EPU-Check → OBOGS-BIT. Mit erwarteten Leuchten in Abschnitt 2.15 [belegt S5, teils S1].
+4. **Kaltstart** in Kurzform: Triebwerkspanel prüfen (EEC/BUC auf EEC, STARTING FUEL, MAX POWER OFF) → MAIN PWR BATT → FLCS-Power-Test → MAIN PWR → JFS START 2 → Throttle IDLE → JFS aus bei ca. 50 % → Leerlauf 60–76 % → Avionik ein → INS ausrichten → FLCS BIT → EPU-Check → OBOGS-BIT. Mit erwarteten Leuchten in Abschnitt 2.15 [belegt S5, S9, teils S1, S2].
 5. **Größter Aufwand:** Avionik (MFD-Formate, DED-Seiten, INS, Radar) und Waffen/SMS sind je für sich größer als alle mechanischen Systeme zusammen. Für planr sinnvoll: zuerst Elektrik, Kraftstoff, Triebwerk/JFS/EPU, Hydraulik, Fahrwerk, Licht und Caution/Warning vollständig; Avionik nur mit Grundformaten; Waffen und ECM als Attrappen mit Stellungslogik.
 
 ---
@@ -64,11 +76,11 @@ Nicht genutzt: [flightchecklist.app](https://flightchecklist.app/bms/f-16c-block
 | FUEL | AIR REFUEL | K2 | OPEN / CLOSE | Kraftstoff, FLCS, Licht | S2, S3 |
 | ENG & JET START | JFS | K3 (F, hält in START per Magnet bis Abschaltung) | START 1 / OFF / START 2 | Triebwerk/JFS | S1, S2, S3 |
 | ENG & JET START | JFS RUN | Leuchte grün | – | JFS | S1, S2 |
-| ENG & JET START | ENG CONT (Block 50) | K2, G | PRI / SEC | Triebwerk | S1, S2, S3 |
-| ENG & JET START | AB RESET (Block 50) | K3 (F) | AB RESET / NORM / ENG DATA | Triebwerk | S2, S3 |
-| ENG & JET START | MAX POWER | K2, Rahmen | MAX POWER / OFF (Block 50 ohne Wirkung) | Triebwerk | S2, S3 |
-| ENG & JET START | *nur Block 52:* EEC/BUC | K3, G | EEC / OFF / BUC | Triebwerk | S2 |
-| ENG & JET START | *nur Block 52:* STARTING FUEL | K3 | AUTO LEAN / RICH / LEAN | Triebwerk | S2 |
+| ENG & JET START | EEC/BUC | K3, Bügel-Guard | EEC (normal) / OFF / BUC | Triebwerk (Regelung) | S2 |
+| ENG & JET START | STARTING FUEL | K3 | AUTO LEAN / RICH / LEAN | Triebwerk (Startkraftstoff) | S2 |
+| ENG & JET START | MAX POWER | K2, Rahmen | MAX POWER / OFF (normal) | Triebwerk (Schubreserve ab Mach 1,1) | S2 (S3 kennt den Schalter nur ohne Wirkung, Block 50) |
+| ENG & JET START | *Block 50 statt EEC/BUC:* ENG CONT | K2, G | PRI / SEC | Triebwerk | S2, S3; bei Block 52 nicht vorhanden laut Panel-Tabelle in S2 |
+| ENG & JET START | *Block 50:* AB RESET | K3 (F) | AB RESET / NORM / ENG DATA | Triebwerk | S2, S3; F100-Panel ohne diesen Schalter laut S2 |
 | ELEC | MAIN PWR | K3, Hebelsperre | MAIN PWR / BATT / OFF | Elektrik | S2, S3 |
 | ELEC | ELEC CAUTION RESET | T | – | Elektrik/Warnsystem | S2, S3 |
 | ELEC | Leuchten FLCS PMG, MAIN GEN, STBY GEN, EPU GEN, EPU PMG, ACFT BATT TO FLCS, FLCS RLY, ACFT BATT FAIL | Leuchte gelb (8) | – | Elektrik | S2, S3 |
@@ -127,6 +139,7 @@ Nicht genutzt: [flightchecklist.app](https://flightchecklist.app/bms/f-16c-block
 |---|---|---|---|---|---|
 | GEAR | Fahrwerkshebel LG | H (Radform, mit roter Warnleuchte im Griff) | UP / DN | Fahrwerk | S2, S3 |
 | GEAR | DN LOCK REL | T | – (Notentriegelung der Hebelsperre am Boden) | Fahrwerk | S2, S3 |
+| GEAR | LG Handle Down Permission Button | T | – (Funktion nicht gelesen) | Fahrwerk | S1 (nur Inhaltsverzeichnis, 9.4); fehlt in S2/S3 |
 | GEAR | HORN SILENCER | T | – | Warnsystem | S2, S3 |
 | GEAR | Leuchten NOSE, LEFT, RIGHT (grün) | Leuchte (3) | – | Fahrwerk | S2, S3 |
 | GEAR | HOOK | K2 | UP / DN | Fahrwerk (Fanghaken) | S2, S3 |
@@ -148,7 +161,7 @@ Nicht genutzt: [flightchecklist.app](https://flightchecklist.app/bms/f-16c-block
 | THREAT WARNING AUX | SEARCH, ALT (LOW ALT), SYSTEM POWER | T mit Leuchte (3) | – | RWR | S2, S3 |
 | THREAT WARNING AUX | ACTIVITY/POWER | Leuchte | – | RWR | S2, S3 |
 | THREAT WARNING AUX | DIM | Poti | – | RWR/Licht | S2, S3 |
-| HMD/HMCS | Helligkeit HMCS | Poti | OFF … INC | Avionik | S3; laut S2 nur MLU, im USAF-Block-50 offen |
+| HMD/HMCS | Helligkeit HMCS | Poti | OFF … INC | Avionik | S3; laut S2 nur MLU, für den USAF-Block-50/52 offen |
 
 ## 1.3 Frontpanel und Glareshield
 
@@ -309,7 +322,7 @@ Nicht genutzt: [flightchecklist.app](https://flightchecklist.app/bms/f-16c-block
 | Schleudergriff | H | STOW / PULL | Sitz | S3 |
 | Sitzhöhe | K3 (F) | UP / OFF / DOWN | Sitz (elektrisch) | S3 |
 | Pedalverstellung | H | – | Mechanik | S2 |
-| Ruderpedale mit Fußbremsen | Pedal (2 Achsen + 2 Bremsen) | – | FLCS (Seitenruder), Bremsen, NWS | [Sim-Wissen] |
+| Ruderpedale mit Fußbremsen | Pedal (2 Achsen + 2 Bremsen) | – | FLCS (Seitenruder), Bremsen, NWS | S1 (Inhaltsverzeichnis: 17.2 Rudder Pedals, 12 Toe Brake System, 10 NWS); Achsenzahl [Sim-Wissen] |
 | Fahrwerkshebel, Alternate-Gear-Griff | siehe 1.2 | | | |
 
 ---
@@ -322,7 +335,8 @@ Nicht genutzt: [flightchecklist.app](https://flightchecklist.app/bms/f-16c-block
 Triebwerk ──(PTO-Welle)──> Accessory Drive Gearbox (ADG)
    ADG treibt: Hauptgenerator (über CSD), Standby-Generator + FLCS-PMG (gemeinsame Welle),
                Hydraulikpumpe A, Hydraulikpumpe B                          [belegt S1, S4, S8]
-   Engine Alternator (am Triebwerk) versorgt: DEEC, Zündung, RPM-Anzeige   [belegt S1]
+   Engine Alternator (am Triebwerk) versorgt: Triebwerksregler, Zündung, RPM-Anzeige [belegt S1 für den DEEC des PW-220;
+               dass er beim PW-229 die EEC speist, ist Ableitung; S2 deutet die EEC-Caution als Alternator-Ausfall]
 JFS ──(Kupplung)──> ADG  (Anlassen; Energie aus den beiden Brake/JFS-Speichern, Hydraulik B lädt nach) [belegt S1]
 EPU (Hydrazin und/oder Zapfluft) ──> EPU-Generator (Notbusse) + EPU-PMG (FLCS) + Pumpe Hydraulik A [belegt S4]
 Batterie ──> Batteriebusse 1/2 (Notversorgung FLCS, JFS-Zündung/Steuerung, Warnleuchten)  [belegt S1, S4]
@@ -340,6 +354,8 @@ Für den Sim heißt das: **ein Simulationsschritt in fester Reihenfolge** [Sim-W
 **Quellen** [belegt S4, S8, Leistungsangaben aus Lernkarten/Forum]: Hauptgenerator 60 kVA (über Constant Speed Drive an der ADG), Standby-Generator 10 kVA (ADG, gemeinsame Welle mit FLCS-PMG), EPU-Generator 5 kVA, Batterie 26 V. Dazu für das FLCS: FLCS-PMG (vier Ausgänge, ab ca. 40 % RPM ausreichend [S4]) und EPU-PMG. Außenbordstrom am Boden.
 
 **Busse** [Struktur belegt S2, S4, S7, Namen aus S1]: Nonessential AC 1/2, Nacelle AC, Essential AC, Emergency AC 1/2, Nonessential DC, Essential DC, Emergency DC 1/2, Battery Bus 1/2, vier FLCS-Zweige A–D. Die DC-Busse werden über zwei AC/DC-Wandler aus den Emergency-AC-Bussen gespeist [S4].
+
+**Gliederung in S1 Kapitel 6** (nur Inhaltsverzeichnis gelesen): Busdiagramm, Main Power AC, Overcurrent Sensing Contactors, STBY AC, Emergency AC, DC-System, FLCS-Stromversorgung, Außenbordstrom, Normalbetrieb, Bedienelemente und Anzeigen. Das bestätigt die vier Versorgungsebenen (Haupt-AC, Standby-AC, Notfall-AC, DC) und die eigenen Überstromschalter, nicht aber die Zuordnung einzelner Geräte.
 
 **Was bei welcher Quelle noch Strom hat** (Lastabwurf):
 
@@ -360,11 +376,12 @@ Für den Sim heißt das: **ein Simulationsschritt in fester Reihenfolge** [Sim-W
 | FWD/AFT FUEL LOW | Emergency DC 1 | belegt S1 |
 | automatisches Vorwärts-Umpumpen (Trimmventil); Triebwerks-Anti-Ice (öffnet bei Stromausfall) | Emergency DC 2 | belegt S1 |
 | ECS-Steuerung | Emergency DC | belegt S4 |
-| DEEC, Zündung, RPM-Signal | Engine Alternator (eigenständig) | belegt S1 |
+| Triebwerksregler (S1: DEEC des PW-220), Zündung, RPM-Signal | Engine Alternator (eigenständig) | belegt S1 |
 | Radar (FCR), MMC, VHF, Radarhöhenmesser, PFLD | fallen bei Hauptgenerator-Ausfall aus → Nonessential | belegt S7 |
 | Kraftstoff-Boost- und Transferpumpen | fallen bei Ausfall von Haupt- **und** Standby-Generator aus | belegt S4 |
 | Kabinenhaube (am Boden) | auch bei MAIN PWR OFF | belegt S2, S4 |
-| ICP/DED, MFDs, HUD, INS, UHF, IFF, TACAN, Licht | Essential bzw. Nonessential | **[Sim-Wissen]**, in S1 Kap. 6 nachprüfen |
+| ICP/DED, MFDs, HUD, INS, UHF, IFF, TACAN, Licht | Essential bzw. Nonessential | **[Sim-Wissen]**; in #20 keine frei zugängliche Quelle gefunden, S1 Kap. 6.1 (Busdiagramm) bleibt nachzuprüfen |
+| Fahrwerks-Grünleuchten (ohne Außenbordstrom) | erst an, wenn der Hauptgenerator auf Drehzahl ist | belegt S8 (Forum) |
 
 **Schalterlogik MAIN PWR** [belegt S2]: OFF am Boden trennt alles (nur Haube und Ladeerhaltung FLCS-Batterien bleiben); BATT legt die Batterie auf die Batteriebusse, trennt Generator/Außenbordstrom und setzt den Hauptgenerator zurück; MAIN PWR verbindet Außenbordstrom oder Hauptgenerator, gibt den Standby-Generator frei und hält die Batterie an den Batteriebussen, solange kein AC da ist. Beim Anlassen übernimmt der Generator automatisch, sobald Spannung und Frequenz stimmen [S8].
 
@@ -383,18 +400,20 @@ Für den Sim heißt das: **ein Simulationsschritt in fester Reihenfolge** [Sim-W
 
 **ELEC SYS** (Caution) = mindestens eine ELEC-Leuchte an [belegt S6]. **ELEC CAUTION RESET** setzt ELEC SYS und MASTER CAUTION zurück, versucht Haupt- und Standby-Generator wieder aufzuschalten und setzt die Überlastschalter für Nonessential AC und Nacelle AC zurück [belegt S2, S4, S7].
 
-**Sim muss nachbilden:** Busse als Zustandsgraph, Generatoren mit Drehzahlschwelle (Generator online ab ca. 55–60 % RPM [Sim-Wissen]), Batterieladung (Batterie-Betrieb am Boden laut S5 höchstens 5 min ohne laufendes Triebwerk), Lastabwurf, Reset-Taste, Fehlerinjektion (Generator fällt aus).
+**Sim muss nachbilden:** Busse als Zustandsgraph, Generatoren mit Drehzahlschwelle (Hauptgenerator schaltet sich selbst zu, sobald Spannung und Frequenz stimmen [S8]; Schwelle ca. 55–60 % RPM [Sim-Wissen]; der JFS kuppelt laut S1 bei 50 % aus, ab dann treibt das Triebwerk die ADG), Batterieladung (Batterie-Betrieb am Boden laut S5 höchstens 5 min ohne laufendes Triebwerk), Lastabwurf, Reset-Taste, Fehlerinjektion (Generator fällt aus).
 
 ## 2.3 Hydraulik A/B
 
 [belegt S4, teils S1] Zwei unabhängige Systeme, je ca. 3000 psi (normal 2850–3250), Pumpen an der ADG.
 
 - **A:** FLCS, LEF, Speedbrakes, Fuel Flow Proportioner [S1 für FFP].
-- **B:** FLCS, LEF, Fahrwerk, Bugradlenkung, Radbremsen, Kanone, Luftbetankungsklappe [S1], Nachladen der Brake/JFS-Speicher (40–60 s, ab ca. 12 % RPM laut S4; S1 nennt 40–60 s).
+- **B:** FLCS, LEF, Fahrwerk, Bugradlenkung, Radbremsen, Kanone, Luftbetankungsklappe [S1], Nachladen der Brake/JFS-Speicher (40–60 s, beginnt ab ca. 12 % RPM; beides laut S1 und S4).
 - **FLCS-Servos (ISA):** werden aus beiden Systemen gespeist; fällt eines aus, arbeiten die Flugsteuerungen weiter [S4].
 - **EPU** treibt eine Pumpe für **System A**, wenn beide Systeme unter 1000 psi fallen [S4].
 - **Speicher:** FLCS-Speicher (je System), Brake/JFS-Speicher (JFS-Start und Notbremse), pneumatische Flasche für Alternate Gear und Haken (im Flug nicht nachfüllbar) [S4].
 - **Warnung:** HYD/OIL PRESS, wenn A oder B < 1000 psi [S1].
+- **S1 Kapitel 7** besteht laut Inhaltsverzeichnis nur aus Druckanzeigen und der HYD/OIL-PRESS-Leuchte; eine Verbraucherliste je System ließ sich dort nicht lesen. Die Liste oben stützt sich darum weiter auf S4 (älteres Muster, für Block 52 nicht geprüft) und die Einzelangaben aus S1 Kapitel 2–4.
+- **EPU** (S1 Kapitel 8, nur Gliederung): zusätzlich zu den bekannten Leuchten ein Bodensicherungsschalter (EPU Ground Safety Switch), ein Hydrazin-Leckdetektor und eine „EPU Fired“-Anzeige.
 
 **Sim muss nachbilden:** Druck als Funktion von RPM (Pumpe), Verbrauch durch Bewegungen, Leck/Ausfall je System, Speicherfüllstände (JFS-Startfähigkeit hängt davon ab).
 
@@ -418,14 +437,24 @@ Für den Sim heißt das: **ein Simulationsschritt in fester Reihenfolge** [Sim-W
 
 ## 2.5 Triebwerk, JFS, EPU
 
-### Triebwerk (Block 50: F110-GE-129)
+### Triebwerk (Block 52: P&W F100-PW-229)
 
-- **DEEC** regelt Kraftstoff, Düse, Leitschaufeln und Nachbrenner [S1]. **SEC** ist die hydromechanische Rückfallebene: Düse geschlossen, kein Nachbrenner, 80–100 % MIL-Schub; automatisch bei Überdrehzahl/Übertemperatur, sonst über ENG CONT [S1]; Caution SEC. Beim Start leuchtet SEC bis ca. 20 % RPM [S5].
-- **Throttle-Rasten** OFF / IDLE / MIL / MAX AB, Nachbrenner in 5 Segmenten; Hochlauf IDLE → MAX AB ca. 4 s in Bodennähe, ca. 11 s in großer Höhe; bis zu drei Zündversuche des Nachbrenners [S1].
-- **Instrumente** [S1]: RPM 0–100 %, NOZ POS 0–100 %, FTIT 200–1200 °C, Fuel Flow 0–80 000 pph, Öl 0–100 psi.
-- **Leerlaufwerte nach Start (GE129, BMS)** [S5]: Fuel Flow 700–1700 pph, Öl ≥ 15 psi, NOZ > 94 %, RPM 65–80 %, FTIT < 650 °C, Hydraulik A/B 2850–3250 psi.
-- **Anti-Ice** ENGINE ON/AUTO/OFF; AUTO schaltet über Eisdetektor (nicht zuverlässig am Boden und über 7° AOA); OFF hält das Ventil elektrisch zu, bei Stromausfall öffnet es [S2, S1].
+**Quellenlage:** S1 beschreibt in Kapitel 2 ausdrücklich das **F100-PW-220/220E** (ca. 25 000 lb Schub, Regelung DEEC mit hydromechanischer Rückfallebene SEC, Schalter ENG CONT) und führt die Caution-Leuchten EEC und BUC als deaktiviert; das PW-229 und das GE129 kommen nur in der Gewichtstabelle (1.4) und in Überschriften der Notverfahren vor [belegt S1]. BMS bildet also für alle Blöcke ein PW-220-artiges Triebwerk nach. Die bisherige Fassung dieses Dokuments hatte diese S1-Angaben dem GE129 (Block 50) zugeordnet; das war falsch. PW-229-eigene Angaben gibt es hier nur aus S2 (Schalter) und S9 (Leerlaufwerte in BMS).
+
+- **Regelung PW-229** [belegt S2]: Normalbetrieb mit **EEC** (Schalter EEC). In **OFF** ist die EEC abgeschaltet, das Triebwerk läuft über die hydromechanische Grundregelung (S2 nennt sie „UFC“, gemeint ist die Unified Fuel Control, nicht das Bedienteil). **BUC** schaltet auf die Backup-Regelung; ob umgeschaltet wird, hängt laut S2 von RPM und Throttle ab (über 52 % RPM nur mit Throttle mindestens auf BUC IDLE, darunter immer). S2 unterscheidet dabei zwei nicht erklärte Varianten „80“ und „LESS 80“.
+- **Caution BUC:** Backup-Regelung gewählt und aktiv oder Druck der Hauptkraftstoffpumpe zu niedrig [S2]. **Caution EEC:** laut S2 „Engine Alternator ausgefallen“; die Deutung ist dort nicht weiter erklärt und passt nur teilweise (im S1-Modell meldet ENGINE den Alternatorausfall).
+- **Was BUC einschränkt** (kein Nachbrenner, Düse, Schubanteil): in den gelesenen Quellen **nicht belegt**. Vorschlag für planr [Sim-Wissen/Annahme]: BUC wie den SEC-Betrieb in S1 behandeln, also Düse geschlossen, kein Nachbrenner, 80–100 % des MIL-Schubs, im Leerlauf etwa doppelter Schub wegen geschlossener Düse [Verhalten belegt S1 für SEC beim PW-220].
+- **STARTING FUEL** [belegt S2]: AUTO LEAN = magerer Startkraftstoff bis 30 s nach Zuschalten des Hauptgenerators, danach 100 pph mehr; in BUC automatisch fett. RICH = immer fett, LEAN = immer mager. Folgen für Heißstart oder Fehlstart: nicht belegt [Sim-Wissen: fett = höhere FTIT beim Start, mager = Gefahr eines Hängestarts].
+- **MAX POWER** [belegt S2]: gibt bei Throttle MAX AB ab Mach 1,1 den höchsten Schub frei; OFF ist Normalstellung. Beim Block 50 ohne Funktion.
+- **Throttle-Rasten** OFF / IDLE / MIL / MAX AB, Nachbrenner in 5 Segmenten; IDLE für alle Starts, Cutoff Release nötig für IDLE → OFF; Hochlauf IDLE → MAX AB ca. 4 s in Bodennähe, ca. 11 s in großer Höhe; bis zu drei automatische Wiederzündungen des Nachbrenners; ab Mach 1,4 mindestens MIL-Schub [S1, PW-220].
+- **Zündung:** dauernd, solange Throttle mindestens IDLE und RPM ≥ 12 % [S1, PW-220].
+- **Instrumente** [S1]: RPM 0–100 % und FTIT 200–1200 °C (beide Battery Bus 1), NOZ POS 0–100 % und Öl 0–100 psi (Emergency AC 2), Fuel Flow 0–80 000 pph (Emergency AC 1). Für das PW-229 gleich angenommen [Ableitung, die Anzeigen sitzen im selben Cockpit].
+- **Leerlaufwerte nach Start (PW-229, BMS)** [S9]: Fuel Flow 700–1700 pph, Öl ≥ 15 psi, NOZ > 94 %, **RPM 60–76 %**, FTIT < 650 °C, Hydraulik A/B 2850–3250 psi. *Block 50 (GE129, S5):* RPM 65–80 %, sonst gleiche Werte.
+- **Nach MIL-Start** [S1, PW-220]: FTIT meist 890–960 °C bei 89–94 % RPM (über 2 °C Außentemperatur), Düse bei MIL höchstens 30 %.
+- **Öl** [S1]: Druck ungeregelt, steigt von IDLE nach MIL um ca. 15 psi (in 50 000 ft nur ca. 5 psi). Die Ölübertemperatur-Funktion von FUEL/OIL HOT ist in BMS ohne Funktion [S1].
+- **Anti-Ice** ENGINE ON/AUTO/OFF; ON = Heizung und Triebwerks-Anti-Ice für ca. 70 s, wiederholt bei anhaltender Vereisung; AUTO nur bei erkanntem Eis (nicht zuverlässig am Boden und über 7° AOA); OFF schaltet Eisdetektor und Heizung ab; über 30 000 ft und bei hohen Temperaturen sperrt der Regler; bei Ausfall von Emergency DC 2 öffnet das Ventil [S1, S2].
 - **Warnungen:** ENGINE bei RPM < 55 %, Stagnation, FTIT > 1000 °C für ca. 2 s, Ausfall Engine Alternator [S1]; HYD/OIL PRESS bei Öl < ca. 10 psi für 30 s (aus über ca. 20 psi) [S1]; ENGINE FAULT bei Verlust gültiger Machdaten u. a. [S2]; ENG FIRE/OVERHEAT [S2].
+- *Block 50 (GE129) zum Vergleich:* ENG CONT PRI/SEC statt EEC/BUC, Caution SEC (beim Start bis ca. 20 % RPM an, SEC-Check am Boden) [S2, S5].
 
 ### JFS (Jet Fuel Starter)
 
@@ -442,13 +471,13 @@ Für den Sim heißt das: **ein Simulationsschritt in fester Reihenfolge** [Sim-W
 - **Leuchten:** EPU RUN (Drehzahl im Bereich und Pumpendruck > 2000 psi; Blinken = Tertiärregelung), HYDRAZN (Hydrazin wird kommandiert), AIR (EPU kommandiert, Stift gezogen) [S4, S2].
 - **Bodentest** [S5]: EPU OFF → NORM, Throttle 80 %, EPU/GEN TEST halten: AIR an, EPU GEN/PMG aus, FLCS PWR an, RUN innerhalb 5 s; Anzeige EPU FUEL 95–102 %.
 
-**Sim muss nachbilden:** drei Drehzahlmodelle (Triebwerk N2, JFS, EPU), Speicherfüllung, Zündung abhängig von RPM und Kraftstoff, FTIT-Kurve beim Start (Heißstart möglich), DEEC/SEC-Umschaltung, Hydrazinvorrat. Hoch komplex, aber zentral für einen glaubwürdigen Kaltstart.
+**Sim muss nachbilden:** drei Drehzahlmodelle (Triebwerk N2, JFS, EPU), Speicherfüllung, Zündung abhängig von RPM und Kraftstoff, FTIT-Kurve beim Start (Heißstart möglich, abhängig von STARTING FUEL), EEC/BUC-Umschaltung, MAX-POWER-Freigabe, Hydrazinvorrat. Hoch komplex, aber zentral für einen glaubwürdigen Kaltstart.
 
 ## 2.6 FLCS (Fly-by-Wire)
 
 [belegt S2, S4; S4-Leuchtennamen gelten für ältere Blöcke]
 
-- Vierkanalig, digital (Block 50: DFLCC mit Digital Backup). Steuerflächen über vier ISAs mit Hydraulik A und B.
+- Vierkanalig, digital (Block 50/52: DFLCC mit Digital Backup). Steuerflächen über vier ISAs mit Hydraulik A und B.
 - **Gain-Sätze** [S4]: Ground (WOW), TO/LDG (Fahrwerk unten, ALT FLAPS EXTEND oder AIR REFUEL OPEN), Cruise, Standby (bei doppeltem Luftdatenfehler).
 - **LEF** automatisch nach Mach, Höhe, AOA; am Boden bei IDLE fest 2° nach oben; LOCK hält Stellung und löst FLCS-Warnung aus [S2, S4]. **TEF** folgen dem Fahrwerkshebel oder ALT FLAPS [S2]; mit Fahrwerk unten 20° bis 240 kt [S4].
 - **CAT I / CAT III** setzt die Grenzen für G und Rollrate passend zur Außenlast [S4]; falsche Stellung → STORES CONFIG [S2].
@@ -457,19 +486,20 @@ Für den Sim heißt das: **ein Simulationsschritt in fester Reihenfolge** [Sim-W
 - **FLCS RESET** setzt Servo-/Elektronikfehler, FLCS-Warnung, CADC, FLCS FAULT, MASTER CAUTION zurück [S2].
 - **DIGITAL BACKUP** schaltet auf die Backup-Software, Leuchte DBU ON [S2, S5].
 - **Trimmung:** Hut am Stick und Räder am MANUAL TRIM; TRIM/AP DISC trennt Stick-Trimmung und Autopilot [S2, S5].
-- **Stromversorgung:** sieben Quellen (FLCS-PMG, Hauptgenerator über Emergency DC, Standby-Generator, EPU-Generator, EPU-PMG, Flugzeugbatterie, FLCS-Batterien) [S4, Block-50-aktuell ohne eigene FLCS-Batterieleuchten laut S2].
+- **Stromversorgung:** sieben Quellen (FLCS-PMG, Hauptgenerator über Emergency DC, Standby-Generator, EPU-Generator, EPU-PMG, Flugzeugbatterie, FLCS-Batterien) [S4, Block 50/52 aktuell ohne eigene FLCS-Batterieleuchten laut S2].
+- **Gliederung in S1 Kapitel 15–17** (nur Inhaltsverzeichnis): Limiter für AOA/G, Rollrate, Seitenruderausschlag und Gierrate; Gain-Sätze Cruise, Takeoff/Landing, Standby; FLCS-Datenschreiber, Schiebewinkel-Rückführung (AOS feedback), Kanonenkompensation; ein Low-Speed-Warnton; als Leuchten FLCS (Warning), DBU ON (Warning), FLCS FAULT (Caution) und die PFL-Meldung „FLCS LEF LOCK“. Das bestätigt die Leuchtenliste in 2.13; BIT-Ablauf und Ausfallverhalten je Kanal ließen sich dort nicht lesen und bleiben bei S2/S4/S5.
 
 **Sim muss nachbilden:** planr hat heute eine direkte Steuerung; ein Regler mit G/AOA-Begrenzung, Gain-Umschaltung und Trimmung gehört eigentlich in die Flugdynamik (siehe [f16-flugmodell.md](f16-flugmodell.md)). Für die Schalter reicht: Gain-Satz-Auswahl, Limiter-Parameter je CAT, LEF/TEF-Logik, BIT-Zustandsautomat, Fehlerzustände je Kanal.
 
 ## 2.7 Avionik und Navigation
 
 - **Einschalten** über AVIONICS POWER (MMC, ST STA, MFD, UFC, GPS, DL, MAP, MIDS) und SNSR PWR (FCR, RDR ALT, HDPT) [S2, S3]. Ohne Nonessential-Bus fallen FCR, MMC, Radarhöhenmesser, PFLD aus [S7].
-- **INS** [S2]: OFF / STOR HDG (Ausrichtung mit gespeichertem Kurs) / NORM (volle Ausrichtung) / NAV / CAL / INFLT ALIGN / ATT. Dauer: NORM ca. 8 min, STOR HDG ca. 90 s [Sim-Wissen]; mit GPS ist die Position laut S5 nach ca. 90 s brauchbar (AUX-Flag am ADI aus).
+- **INS** [S2]: OFF / STOR HDG (Ausrichtung mit gespeichertem Kurs) / NORM (volle Ausrichtung) / NAV / CAL / INFLT ALIGN / ATT. Dauer: NORM ca. 8 min, STOR HDG ca. 90 s [Sim-Wissen]; mit GPS ist die Position laut S5 nach ca. 90 s brauchbar (AUX-Flag am ADI aus). Das BMS-Avionikhandbuch kennt für das EGI nur „Normal Gyrocompass Alignment“ und „In-Flight Alignment“ als eigene Abschnitte [S10, Inhaltsverzeichnis]; S9 wartet am Boden auf „ALIGN OK“/RDY und schaltet dann auf NAV.
 - **ICP/DED:** ca. 15 Hauptseiten (CNI, COM1/2, IFF, LIST mit Unterseiten, T-ILS, ALOW, STPT, CRUS, TIME, MARK, FIX, A-CAL, M-SEL), Eingabe über Ziffern, DCS und ENTR/RCL [S2]. DTC-Laden über MFD-Seite [S2].
-- **MFD-Formate** [Sim-Wissen]: FCR, TGP, WPN, HSD, SMS, DTE, TEST (mit MFL), FLCS, FLIR, BLANK; je MFD drei vorwählbare Seiten.
+- **MFD-Formate** [belegt S10, Inhaltsverzeichnis]: Menu, OFF, SWAP, BLANK, RCCE, RESET, DTE, TEST, FLCS, TCN, HSD, FCR, SMS, HAD, FLIR, TFR, TGP, dazu IDM und Link 16. Je MFD drei vorwählbare Seiten [Sim-Wissen]. MFDs brauchen nach dem Einschalten ca. 24 s zum Aufwärmen [S9].
 - **HUD-Panel** steuert, was im HUD steht (Skalen, FPM/Leiter, DED/PFL, CAS/TAS/GS, Radar-/Baro-Höhe mit AUTO unter 1500 ft) [S2].
 - **Navigation:** TACAN (AUX COMM, Lautstärke = Ein/Aus am Audio-2-Panel), ILS (ILS-Poti = Ein/Aus), INSTR MODE wählt Quelle fürs EHSI [S2].
-- **Autopilot** [S2]: PITCH ALT HOLD / OFF / ATT HOLD, ROLL HDG SEL / ATT HOLD / STRG SEL; Paddle unterbricht. Abfall bei Grenzen [Sim-Wissen].
+- **Autopilot** [S2]: PITCH ALT HOLD / OFF / ATT HOLD, ROLL HDG SEL / ATT HOLD / STRG SEL; Paddle unterbricht. Dazu Stick Steering als eigener Abschnitt in S1 (17.13.2, nur Inhaltsverzeichnis). Abfall bei Grenzen [Sim-Wissen].
 - **CADC:** liefert Luftdaten an FLCS, Triebwerk und Instrumente; Fehler → CADC-Caution [S2, S4].
 
 **Sim muss nachbilden:** Stromabhängigkeit je Gerät, Aufwärmzeiten, INS-Ausrichtung als Zustandsautomat, DED-Seitenlogik, MFD-Formate. **Größter Einzelposten** des ganzen Cockpits.
@@ -477,7 +507,7 @@ Für den Sim heißt das: **ein Simulationsschritt in fester Reihenfolge** [Sim-W
 ## 2.8 Funk und IFF
 
 - **UHF** (COMM 1) und **VHF** (COMM 2); Ein/Aus und Lautstärke über die Potis am Audio-1-Panel, Squelch/Guard über die Modusknöpfe; Bedienung normal über ICP/DED, das UHF-Backup-Panel nur bei CNI = BACKUP [S2]. Senden über Transmit-Hut am Throttle [S2].
-- **IFF:** MASTER OFF/STBY/LOW/NORM/EMER, Mode 4 (Code, Reply, Monitor), Modi 1/3 über Ziffernwähler oder DED, IDENT am Eyebrow (15–30 s) [S2, S3]; Caution IFF bei Mode-4-Problem [S2, Sim-Wissen für genaue Bedingung].
+- **IFF:** MASTER OFF/STBY/LOW/NORM/EMER, Mode 4 (Code, Reply, Monitor), Modi 1/3 über Ziffernwähler oder DED, IDENT am Eyebrow (15–30 s) [S2, S3]; Caution IFF bei Mode-4-Problem [S2; S10 hat dafür einen eigenen Abschnitt 2.1.1.29, Inhalt nicht lesbar; genaue Bedingung Sim-Wissen].
 - **KY-58** Verschlüsselung (Modus, Schlüsselregister, Power), PLAIN/CIPHER [S2].
 - **Antennenwahl** UHF/IFF UPPER/NORM/LOWER [S2].
 - **Sim muss nachbilden:** Frequenzspeicher, Stromabhängigkeit, Audio-Mischung (Lautstärken für MSL-Ton, Threat, TACAN-Kennung, ILS-Kennung). Für planr ohne Mehrspieler: geringe Tiefe, viele Elemente.
@@ -486,6 +516,7 @@ Für den Sim heißt das: **ein Simulationsschritt in fester Reihenfolge** [Sim-W
 
 - **Außen** [S2, S3]: Anti-Collision (Blinkmuster 1–4, A–C), Positionslichter (Flash/Steady), Wing/Tail und Fuselage je BRT/OFF/DIM, Formationslichter (Poti), MASTER (OFF/ALL/A-C/FORM/NORM), Luftbetankungslicht, Lande-/Rolllicht am Gear-Panel. AIR REFUEL OPEN schaltet AR-Floodlight und Seitenleitwerkslicht ein [S2].
 - **Innen** [S2]: Primärbeleuchtung Konsolen/Instrumente/DED, Flutlicht Konsolen/Instrumente, MAL & IND LTS BRT/DIM, Spot-Lampe, Indexer- und AR-Helligkeit [S3].
+- **Gliederung in S1 Kapitel 20** (nur Inhaltsverzeichnis): außen Anti-Collision-Strobe, Positions-/Formationslichter, Luftbetankungslichter, Seitenleitwerks-Flutlicht, Lande- und Rolllicht; innen PRIMARY INST PNL, DATA ENTRY DISPLAY, FLOOD INST PNL und Cockpit-Spotlights. Deckt sich mit S2/S3; Helligkeitsstufen und Stromversorgung der Lichter sind dort nicht lesbar.
 - **Sim muss nachbilden:** Lichtquellen in der Szene (planr hat Nav/Beacon/Strobe/Landing bereits), Panelhintergrundbeleuchtung als Emissionsfaktor, Stromabhängigkeit. Gering komplex, sichtbar wirkungsvoll in VR.
 
 ## 2.10 Umwelt (ECS) und Sauerstoff
@@ -494,7 +525,7 @@ Für den Sim heißt das: **ein Simulationsschritt in fester Reihenfolge** [Sim-W
 - **Kabinendruck** [S4]: bis 8000 ft ungeregelt, 8000 ft Kabinenhöhe bis 23 000 ft, darüber 5 psi Differenz; CABIN PRESS über 27 000 ft Kabinenhöhe.
 - **EQUIP HOT** bei zu wenig Kühlluft, Radar wird abgeschaltet [S2, S4].
 - **TEMP** AUTO/MAN, DEFOG-Hebel [S2]; Sondenheizung PROBE HEAT (Caution PROBE HEAT) [S2, S5].
-- **Sauerstoff** (Block 50 mit OBOGS) [S2, S3, S5]: SUPPLY PBG/ON/OFF, DILUTER NORM/100 %, EMERGENCY/NORMAL/TEST MASK, OBOGS BIT (OXY LOW ca. 10 s an, frühestens 2 min nach Start), FLOW-Blinker; OXY LOW bei zu niedrigem Druck bzw. Vorrat [S4].
+- **Sauerstoff** (Block 50/52 mit OBOGS; S1 Kapitel 22 hat keine Unterabschnitte und war nicht lesbar) [S2, S3, S5]: SUPPLY PBG/ON/OFF, DILUTER NORM/100 %, EMERGENCY/NORMAL/TEST MASK, OBOGS BIT (OXY LOW ca. 10 s an, frühestens 2 min nach Start), FLOW-Blinker; OXY LOW bei zu niedrigem Druck bzw. Vorrat [S4].
 - **Sim muss nachbilden:** Kabinenhöhe aus Flughöhe und ECS-Zustand, Hypoxie-Effekt (optional, z. B. Sicht trüben), Warnungen. Mittel/gering komplex.
 
 ## 2.11 Fahrwerk und Bremsen
@@ -507,6 +538,7 @@ Für den Sim heißt das: **ein Simulationsschritt in fester Reihenfolge** [Sim-W
 - **NWS:** elektrisch gesteuert, Hydraulik B, max. 32°, über Stick-Taste ein/aus, Anzeige AR/NWS; NWS FAIL Caution.
 - **Bremsen:** Hydraulik B (Notbremse aus Brake/JFS-Speicher), Kanal 1 (nur mit Fahrwerk unten) / Kanal 2; Anti-Skid ab 12 kt beim Beschleunigen, bis 5 kt beim Abbremsen; ANTI SKID-Caution; Parkbremse nur bei IDLE und WOW, löst automatisch beim Gas geben.
 - **Haken** pneumatisch, Caution HOOK, wenn nicht oben verriegelt.
+- **Gliederung in S1 Kapitel 9–14** (nur Inhaltsverzeichnis): Fahrwerk mit Down-Permission-Taste, DN LOCK REL, ALT GEAR, Horn und HORN SILENCER, TO/LDG CONFIG, Grünleuchten, WOW-Schaltern; NWS mit Stick-Taste, NWS-Leuchte, NWS FAIL; Radbremsen mit **Spin-Down-Bremsung** (Deutung: Räder nach dem Abheben/Einfahren abbremsen), Kanalschalter, Parkbremse, Anti-Skid mit Schalter und Caution; Speedbrake mit SPD-BRK-Schalter und Stellungsanzeige; Fanghaken (Arrestment). Bestätigt die Elemente oben; Zahlen (NWS-Winkel, Anti-Skid-Geschwindigkeiten) bleiben bei S4.
 - **Sim muss nachbilden:** planr hat Fahrwerk und Parkbremse schon (`gearCanMove`, `parkBrake`); dazu kommen Hydraulikabhängigkeit, WOW-Logik, Hebelsperre, Warnbedingungen, NWS-Zustand, Bremskanäle. Mittel komplex.
 
 ## 2.12 Waffen/Stores und Gegenmaßnahmen
@@ -521,7 +553,7 @@ Für den Sim heißt das: **ein Simulationsschritt in fester Reihenfolge** [Sim-W
 
 **Prinzip** [belegt S6, S2]: Jede Caution-Leuchte schaltet MASTER CAUTION (Ausnahme laut S6: IFF). MASTER CAUTION-Taste quittiert, die Einzelleuchte bleibt, bis die Ursache weg ist. Warnungen (rote Eyebrow-Leuchten) kommen mit Sprachansage („Warning, Warning“), Cautions mit „Caution“ [belegt S7]; das VMS lässt sich mit VOICE MESSAGE INHIBIT stummschalten [S2]. Fehlertexte erscheinen im PFLD und über F-ACK [S2].
 
-**Caution Panel Block 50/52** (Reihenfolge laut S2; Auslöser zusammengeführt):
+**Caution Panel Block 52** (Reihenfolge laut S2, dort eine gemeinsame Tafel für Block 40/42 und 50/52 mit den Feldern SEC, EEC und BUC; Auslöser zusammengeführt). Beim Block 52 arbeiten EEC und BUC, das SEC-Feld bleibt dunkel [Ableitung aus dem Triebwerk; nicht ausdrücklich belegt]. In BMS (S1) ist es umgekehrt: EEC und BUC deaktiviert, SEC aktiv.
 
 | Feld | löst aus, wenn | Quelle |
 |---|---|---|
@@ -530,7 +562,7 @@ Für den Sim heißt das: **ein Simulationsschritt in fester Reihenfolge** [Sim-W
 | AVIONICS FAULT | Avionikfehler (Eintrag in der MFL) | S2 |
 | SEAT NOT ARMED | Sitz-Sicherungshebel nicht ARMED | S2 |
 | ELEC SYS | eine ELEC-Panel-Leuchte an | S6 |
-| SEC | Triebwerk in SEC (manuell oder automatisch) | S1 (S2 deutet die Abkürzung falsch) |
+| SEC | beim Block 52 ohne Funktion. *Block 50:* Triebwerk in SEC (manuell oder automatisch) oder Druck der Hauptkraftstoffpumpe zu niedrig | S1 (für das PW-220), S2 deutet die Abkürzung falsch |
 | EQUIP HOT | zu wenig/zu warme Avionikkühlluft | S2, S4 |
 | NWS FAIL | Bugradlenkung defekt | S2, S4 |
 | PROBE HEAT | Sondenheizung aus/defekt im Flug; blinkt im Test | S2, S5 |
@@ -544,12 +576,12 @@ Für den Sim heißt das: **ein Simulationsschritt in fester Reihenfolge** [Sim-W
 | STORES CONFIG | CAT-Schalter passt nicht zur Beladung | S2 |
 | OVERHEAT | Überhitzung im Triebwerksraum; auch im FIRE&OHEAT-Test | S2, S5 |
 | NUCLEAR | Fehler im Nuklear-Steuerkreis | S2 |
-| OBOGS | Sauerstofferzeuger defekt | S3 |
+| OBOGS | Sauerstofferzeuger defekt (S2 führt an dieser Stelle OXY LOW) | S3, S2 |
 | ATF NOT ENGAGED | AUTO TF gewählt, aber nicht aktiv | S2, S3 |
-| EEC (Block 52) / — | Engine Alternator/EEC-Fehler | S2, S1 |
+| EEC | laut S2 Ausfall des Engine Alternators; plausibler wäre ein EEC-Fehler oder EEC aus [Sim-Wissen]. In BMS deaktiviert | S2; S1 (deaktiviert) |
 | CABIN PRESS | Kabinenhöhe > 27 000 ft | S4 |
 | FWD FUEL LOW | vorderes Reservoir < 400 lb | S1 |
-| BUC (Block 52) | Triebwerk im Backup-Control | S1, S2 |
+| BUC | Backup-Regelung gewählt und aktiv oder Druck der Hauptkraftstoffpumpe zu niedrig. In BMS deaktiviert | S2; S1 (deaktiviert) |
 | AFT FUEL LOW | hinteres Reservoir < 250 lb | S1 |
 | 6–8 Felder | frei | S2, S3 |
 
@@ -574,25 +606,25 @@ Für den Sim heißt das: **ein Simulationsschritt in fester Reihenfolge** [Sim-W
 
 Haube elektrisch (Schalter OPEN/HOLD/CLOSE), Verriegelungsgriff, CANOPY-Warnung; funktioniert am Boden auch bei MAIN PWR OFF [S2, S4]. Sitz elektrisch höhenverstellbar, Sicherungshebel → SEAT NOT ARMED [S2, S3]. Gering komplex.
 
-## 2.15 Kaltstart Schritt für Schritt (Block 50, F110)
+## 2.15 Kaltstart Schritt für Schritt (Block 52, F100-PW-229)
 
-Grundlage: BMS-Checkliste [S5]; ergänzt aus S1/S2. Zeitangaben und Leuchtenstände so, wie ein Sim sie prüfen sollte.
+Grundlage: BMS-Checkliste [S5, geschrieben für GE129] und die Block-52-Checkliste [S9]; ergänzt aus S1/S2. Wo S5 Block-50-Eigenheiten enthält (ENG CONT, SEC-Leuchte, SEC-Check), sind sie ersetzt oder als Unterschied vermerkt. Zeitangaben und Leuchtenstände so, wie ein Sim sie prüfen sollte.
 
 | # | Schritt | Erwartung | Quelle |
 |---|---|---|---|
-| 1 | Prüfen: FUEL MASTER MASTER (Guard zu), ENG FEED NORM, EPU NORM, ENG CONT PRI, Throttle OFF, Fahrwerkshebel DN, HOOK UP, MASTER ARM OFF, AIR SOURCE NORM | – | S5 |
+| 1 | Prüfen: FUEL MASTER MASTER (Guard zu), ENG FEED NORM, EPU NORM, **EEC/BUC auf EEC (Guard zu)**, **MAX POWER OFF**, **STARTING FUEL** (Grundstellung vermutlich AUTO LEAN), Throttle OFF, Fahrwerkshebel DN, HOOK UP, MASTER ARM OFF, AIR SOURCE NORM | – | S5; Triebwerkspanel S2 (EEC und MAX POWER OFF als Normalstellung); STARTING FUEL AUTO LEAN [Sim-Wissen]. *Block 50:* ENG CONT PRI |
 | 2 | MAIN PWR → BATT | FLCS RLY an | S5 |
 | 3 | FLCS PWR TEST → TEST halten | ACFT BATT TO FLCS, FLCS PMG, FLCS PWR A–D an; FLCS RLY aus; loslassen | S5 |
-| 4 | MAIN PWR → MAIN PWR | ELEC SYS, HYD/OIL PRESS, FLCS RLY, SEC, ENGINE an; EPU GEN/PMG aus. Höchstens 5 min ohne Triebwerk | S5 |
-| 5 | Haube schließen, Funk einstellen | CANOPY aus | S5 |
-| 6 | JFS → START 2 | JFS RUN innerhalb 30 s | S1, S5 |
-| 7 | Throttle → IDLE bei ≥ 20 % RPM | Zündung innerhalb 10 s: RPM steigt, dann FTIT | S1 (IDLE für Starts), S5 |
-| 8 | Hochlauf beobachten | SEC aus bei ca. 20 %; HYD/OIL PRESS aus zwischen 15 und 70 %; JFS schaltet bei 50–55 % ab, Schalter springt auf OFF; ENGINE aus bei ca. 60 %. Ohne Außenbordstrom zeigen bis zum Generator nur RPM und FTIT | S1, S5 |
-| 9 | Leerlauf prüfen | FF 700–1700 pph, Öl ≥ 15 psi, NOZ > 94 %, RPM 65–80 %, FTIT < 650 °C, HYD A/B 2850–3250 psi; Throttle darf ohne Release nicht nach OFF | S5 |
+| 4 | MAIN PWR → MAIN PWR | ELEC SYS, HYD/OIL PRESS, FLCS RLY, ENGINE an; EPU GEN/PMG aus. Höchstens 5 min ohne Triebwerk. Ob EEC/BUC am Boden vor dem Start leuchten: nicht belegt. *Block 50:* zusätzlich SEC an | S5 |
+| 5 | Haube schließen, Funk einstellen | CANOPY aus | S5, S9 |
+| 6 | JFS → START 2 | JFS RUN innerhalb 30 s | S1, S5, S9 |
+| 7 | Throttle → IDLE (S5: bei ≥ 20 % RPM) | Zündung ab 12 % RPM bei Throttle IDLE möglich; Zündung innerhalb 10 s: RPM steigt, dann FTIT | S1 (IDLE für Starts, Zündschwelle), S5, S9 |
+| 8 | Hochlauf beobachten | HYD/OIL PRESS aus zwischen 15 und 70 %; JFS kuppelt bei ca. 50 % aus, Schalter springt auf OFF (S5: 50–55 %); ENGINE aus bei ca. 60 %; S9 wartet bis ca. 70 %. Ohne Außenbordstrom zeigen bis zum Generator nur RPM und FTIT, die Fahrwerks-Grünleuchten kommen mit dem Hauptgenerator. STARTING FUEL AUTO LEAN: Startkraftstoff wird 30 s nach Zuschalten des Generators um 100 pph angehoben. *Block 50:* SEC aus bei ca. 20 % | S1, S5, S8, S9, S2 |
+| 9 | Leerlauf prüfen | FF 700–1700 pph, Öl ≥ 15 psi, NOZ > 94 %, **RPM 60–76 %**, FTIT < 650 °C, HYD A/B 2850–3250 psi; Throttle darf ohne Release nicht nach OFF. *Block 50:* RPM 65–80 % | S9 (PW-229), S5 |
 | 10 | TEST-Panel: PROBE HEAT (TEST blinkt), FIRE & OHEAT (ENG FIRE, OVERHEAT, MASTER CAUTION), MAL & IND LTS (alle Lampen, VMS-Ansagen) | wie angegeben | S5 |
-| 11 | AVIONICS POWER: MMC, ST STA, MFD, UFC, MAP/DL, GPS ein; INS → NORM (ALIGN) | DED/MFDs starten | S5 |
+| 11 | AVIONICS POWER: MMC, ST STA, MFD, UFC, MAP/DL, GPS ein; INS → NORM (ALIGN) | DED/MFDs starten, MFDs nach ca. 24 s | S5, S9 |
 | 12 | SNSR PWR: FCR ein, RDR ALT STBY, HDPT nach Bedarf; HUD ein (SYM-Knopf); CNI UFC; DTC laden; MFL zurücksetzen | – | S5 |
-| 13 | SEC-Check (optional, auch vor dem Start): ENG CONT SEC → SEC an, Düse < 5 %; Throttle kurz MIL/IDLE; zurück PRI → SEC aus, Düse > 94 % | – | S5 |
+| 13 | *entfällt beim Block 52.* Ein BUC-Bodencheck ist in den gelesenen Quellen nicht beschrieben (S9 kennt keinen). *Block 50:* SEC-Check: ENG CONT SEC → SEC an, Düse < 5 %; Throttle kurz MIL/IDLE; zurück PRI → SEC aus, Düse > 94 % | – | S5, S9 |
 | 14 | FLCS BIT → BIT | RUN an, ca. 45 s; Erfolg: RUN aus, Schalter fällt auf OFF, keine FAIL/FLCS-Leuchte | S2, S5 |
 | 15 | Steuerflächen durchbewegen; Speedbrake zyklisch; drei grüne Leuchten | – | S5 |
 | 16 | FUEL QTY SEL TEST | FUEL LOW beide an, Zeiger 2000, Totalizer 6000; zurück NORM; EPU FUEL 95–102 % | S2, S5 |
@@ -641,7 +673,7 @@ S = einfacher Zustand je Schalter; M = Zustandsautomat mit Abhängigkeiten; L = 
 | Elektrik mit Bussen | ca. 12 | **L** | Busgraph, Lastabwurf, Generatorschwellen, FLCS-Zweige | früh, als Grundlage für alles |
 | Hydraulik A/B | ca. 3 (+ Anzeigen) | M | Druck aus RPM, Speicher, Verbraucherzuordnung | früh |
 | Kraftstoff | ca. 10 | L | 10 Tanks, Transferreihenfolge, Schwerpunkt | früh, gut testbar |
-| Triebwerk + JFS + EPU | ca. 15 | **L/XL** | Startdynamik, FTIT, DEEC/SEC, Hydrazin, Bodensperren | Kern des Kaltstarts |
+| Triebwerk + JFS + EPU | ca. 15 | **L/XL** | Startdynamik, FTIT, EEC/BUC, STARTING FUEL, Hydrazin, Bodensperren | Kern des Kaltstarts |
 | FLCS | ca. 15 | L (Regler) / M (Schalter) | Gains, Limiter, BIT, Fehlerkanäle | Schalterlogik jetzt, Regler mit dem Flugmodell |
 | Avionik/Navigation | ca. 120 (inkl. MFD, ICP) | **XL** | MFD-Formate, DED-Seiten, INS, HUD-Varianten, Radar | in Stufen: Strom/Bootzeit → HUD/EHSI → DED Grundseiten → MFD Grundformate |
 | Funk/IFF/KY-58 | ca. 45 | M | viele Elemente, wenig Wirkung ohne Gegenstelle | Stellungslogik, Audiopegel |
@@ -663,18 +695,21 @@ S = einfacher Zustand je Schalter; M = Zustandsautomat mit Abhängigkeiten; L = 
 
 ## Offene Punkte
 
-- **S1 Kapitel 6 ff. lesen** (Elektrik mit Busdiagramm, Hydraulik, Fahrwerk, FLCS, Licht, Sauerstoff, Normal Procedures 36.x mit dem offiziellen BMS-Kaltstart). Das PDF lokal herunterladen und mit `pdftotext` auswerten; aus diesem Container blockiert der Proxy den Download, und das Abrufwerkzeug schneidet nach Kapitel 5 ab. Das ersetzt die meisten S4-Angaben und alle [Sim-Wissen]-Stellen bei der Buszuordnung.
-- Ebenso das BMS-Training-Manual (Mission „Ramp Start“) und das DCS-F-16C-Handbuch; beide ließen sich hier nicht abrufen.
-- Block-50-spezifisch klären: HMCS-Panel ja/nein, Außenlicht-Panel (Drehschalter laut S3 gegenüber Kippschaltern laut S2), AVTR-Fassung, OXY-QTY-Test (in S3 nicht vorhanden).
-- Ein Busdiagramm als Tabelle Verbraucher → Bus für alle Avionikgeräte ist hier nur teilweise belegt.
+- **S1 Kapitel 6 ff. lesen** (Elektrik mit Busdiagramm 6.1, Hydraulik, Fahrwerk, FLCS mit BIT 17.12, Licht, Sauerstoff, Normal Procedures Kapitel 32 mit dem offiziellen BMS-Kaltstart, Notverfahren 38.4.6/38.5.10 zum PW-229). Stand #20: Download per `curl` aus dem Container vom Proxy per Richtlinie abgewiesen (403 auf `cdn.falcon-bms.com`, laut Proxy-Status „connect_rejected“); das Abrufwerkzeug endet weiter bei ca. 115 000 Zeichen (Seite 62). Ebenfalls per curl gesperrt: web.archive.org, archive.org, falcon-bms.com, digitalcombatsimulator.com, chucksguides.com. **Lösung:** PDF auf einem Rechner ohne diese Sperre laden und mit `pdftotext -layout` auswerten (im Container ist `pdftotext` installiert), oder den Host für die Sitzung freigeben lassen. Das ersetzt die meisten S4-Angaben und die [Sim-Wissen]-Stellen bei der Buszuordnung.
+- **PW-229-Verhalten:** BMS (S1) modelliert das Triebwerk als PW-220 mit DEEC/SEC; für BUC-Einschränkungen, STARTING-FUEL-Folgen und Startgrenzwerte (FTIT-Grenze beim Start, Startzeit) des PW-229 fehlt eine frei zugängliche, unbeschränkte Quelle. Das Projekt muss entscheiden, ob es BUC nach dem Muster SEC (S1) nachbildet (Vorschlag in 2.5).
+- BMS-Training-Manual 4.37/4.38 (Mission „Ramp Start“) und das DCS-F-16C-Handbuch ließen sich auch in #20 nicht abrufen (Abruffehler).
+- Block-52-spezifisch klären: HMCS-Panel ja/nein, Außenlicht-Panel (Drehschalter laut S3 gegenüber Kippschaltern laut S2), AVTR-Fassung, OXY-QTY-Test (in S3 nicht vorhanden), Bedeutung der EEC-Caution (S2: Alternatorausfall) und der Varianten „80“/„LESS 80“ am EEC/BUC-Schalter, Funktion der Down-Permission-Taste (S1 9.4).
+- Ein Busdiagramm als Tabelle Verbraucher → Bus für alle Avionikgeräte ist weiter nur teilweise belegt.
 
 ## Quellen
 
-- S1 [Falcon BMS: TO 1F-16CM/AM-1 BMS, Flight Manual F-16C/D Blocks 50, 52 (4.37)](https://cdn.falcon-bms.com/docs/4.37/TO%201F-16CMAM-1%20BMS.pdf)
+- S1 [Falcon BMS: TO 1F-16CM/AM-1 BMS, Flight Manual F-16C/D Blocks 50, 52, 52+ and MLU (4.37.4)](https://cdn.falcon-bms.com/docs/4.37/TO%201F-16CMAM-1%20BMS.pdf)
 - S2 xflight.de, Panel-Unterseiten: linke Konsole [Übersicht](https://www.xflight.de/pe_org_par_lfc.htm), [Elec](https://www.xflight.de/pe_org_par_lfc_elec.htm), [Engine Start](https://www.xflight.de/pe_org_par_lfc_engstart.htm), [EPU](https://www.xflight.de/pe_org_par_lfc_epu.htm), [Fuel](https://www.xflight.de/pe_org_par_lfc_fuel.htm), [Flt Control](https://www.xflight.de/pe_org_par_lfc_fltctrl.htm), [Test](https://www.xflight.de/pe_org_par_lfc_test.htm), [Ext Lighting](https://www.xflight.de/pe_org_par_lfc_extlight.htm), [Aux Comm](https://www.xflight.de/pe_org_par_lfc_auxcomm.htm), [Audio 1](https://www.xflight.de/pe_org_par_lfc_audio1.htm), [Audio 2](https://www.xflight.de/pe_org_par_lfc_audio2.htm), [Manual Trim](https://www.xflight.de/pe_org_par_lfc_mantrim.htm), [Manual Pitch](https://www.xflight.de/pe_org_par_lfc_manpitch.htm), [ECM](https://www.xflight.de/pe_org_par_lfc_ecm.htm), [UHF](https://www.xflight.de/pe_org_par_lfc_uhf.htm), [AVTR](https://www.xflight.de/pe_org_par_lfc_avtr.htm), [Anti G](https://www.xflight.de/pe_org_par_lfc_antig.htm), [Manual Canopy](https://www.xflight.de/pe_org_par_lfc_mancanopy.htm), [Canopy Jettison](https://www.xflight.de/pe_org_par_lfc_cjettison.htm), [Defog](https://www.xflight.de/pe_org_par_lfc_defog.htm), [Chaff/Flare Button](https://www.xflight.de/pe_org_par_lfc_cfbutton.htm); linke Aux [Gear](https://www.xflight.de/pe_org_par_lxc_gear.htm), [Alt Gear](https://www.xflight.de/pe_org_par_lxc_altgeardn.htm), [Chaff/Flare](https://www.xflight.de/pe_org_par_lxc_chaffflare.htm), [Threat Warning Aux](https://www.xflight.de/pe_org_par_lxc_twaux.htm), [HMD](https://www.xflight.de/pe_org_par_lxc_hmd.htm); Frontpanel [Misc](https://www.xflight.de/pe_org_par_cec_misc.htm), [Eyebrow Lights](https://www.xflight.de/pe_org_par_cec_eyelights.htm), [Eyebrow Buttons](https://www.xflight.de/pe_org_par_cec_eyebuttons.htm), [ICP](https://www.xflight.de/pe_org_par_cec_icp.htm), [Instr Mode](https://www.xflight.de/pe_org_par_cec_instr.htm), [Fuel QTY Sel](https://www.xflight.de/pe_org_par_cec_fuelsel.htm), [MFD](https://www.xflight.de/pe_org_par_cec_mfd.htm), [Threat Warning Prime](https://www.xflight.de/pe_org_par_cec_twprime.htm), [RWR](https://www.xflight.de/pe_org_par_cec_rwr.htm), [Pedal Adj](https://www.xflight.de/pe_org_par_cec_pedaladj.htm); rechte Aux [Caution Panel](https://www.xflight.de/pe_org_par_rxc_wpanel.htm), [PFD](https://www.xflight.de/pe_org_par_rxc_pfd.htm), [EPU Fuel](https://www.xflight.de/pe_org_par_rxc_epufuel.htm); rechte Konsole [Avionics Power](https://www.xflight.de/pe_org_par_rgc_avpower.htm), [SNSR PWR](https://www.xflight.de/pe_org_par_rgc_snsrpwr.htm), [Lighting](https://www.xflight.de/pe_org_par_rgc_lighting.htm), [Air Cond](https://www.xflight.de/pe_org_par_rgc_aircond.htm), [Oxygen Reg.](https://www.xflight.de/pe_org_par_rgc_oxyreg.htm), [Anti Ice](https://www.xflight.de/pe_org_par_rgc_antiice.htm), [HUD](https://www.xflight.de/pe_org_par_rgc_hud.htm), [Zeroize](https://www.xflight.de/pe_org_par_rgc_zeroize.htm), [Nuclear](https://www.xflight.de/pe_org_par_rgc_nuclear.htm), [DTU](https://www.xflight.de/pe_org_par_rgc_dtu.htm), [KY58](https://www.xflight.de/pe_org_par_rgc_ky58.htm), [Floodlight](https://www.xflight.de/pe_org_par_rgc_floodlight.htm); [Sidestick](https://www.xflight.de/pe_org_par_ssc.htm), [Throttle](https://www.xflight.de/pe_org_par_tqs.htm)
 - S3 [DCS-BIOS, F-16C_50.lua](https://raw.githubusercontent.com/DCS-Skunkworks/dcs-bios/main/Scripts/DCS-BIOS/lib/modules/aircraft_modules/F-16C_50.lua) (Community-Projekt; Datei ohne eigenen Lizenzkopf, nur als Referenz gelesen)
 - S4 Brainscape, Nutzer-Deck „F-16“: [Übersicht](https://brainscape.com/packs/12578530), [Electrical System](https://brainscape.com/flashcards/electrical-system-7636120/packs/12578530), [Hydraulic System](https://www.brainscape.com/flashcards/hydraulic-system-7632457/packs/12578530), [EPU](https://www.brainscape.com/flashcards/epu-7634205/packs/12578530), [Fuel System](https://www.brainscape.com/flashcards/fuel-system-7632801/packs/12578530), [FLCS](https://www.brainscape.com/flashcards/flcs-7642762/packs/12578530), [ECS](https://www.brainscape.com/flashcards/ecs-7642667/packs/12578530), [Engine](https://www.brainscape.com/flashcards/engine-7638700/packs/12578530)
 - S5 [47th FS: BMS Checklist short V7](https://47df.com/downloads/Taktik_Page/47th_BMS_Checklist_short_V7.pdf)
 - S6 [Falcon-BMS-Forum: Master Caution/Elect systm/EPU](https://forum.falcon-bms.com/topic/16854/master-caution-elect-systm-epu)
 - S7 [BMS-Wiki (biligame): 9 飞行中故障](https://wiki.biligame.com/falconbms/9_%E9%A3%9E%E8%A1%8C%E4%B8%AD%E6%95%85%E9%9A%9C)
-- S8 f-16.net: [Generators in the F-16](https://www.f-16.net/forum/viewtopic.php?p=8223), [Main PWR on the F-16](https://www.f-16.net/forum/viewtopic.php?p=186657)
+- S8 f-16.net: [Generators in the F-16](https://www.f-16.net/forum/viewtopic.php?p=8223), [Main PWR on the F-16](https://www.f-16.net/forum/viewtopic.php?p=186657), [dieselbe Diskussion, p=186672](https://www.f-16.net/forum/viewtopic.php?p=186672)
+- S9 [QuebecAirForce: QAF Ramp Start BMS 4.37, Kurzfassung (F-16CM-52, PW-229)](https://www.quebecairforce.com/img/Sim_BMS/Ref/Procedures/Ramp_Start/BMS437/QAF_Ramp_Start_437_Sommaire.pdf)
+- S10 [Falcon BMS: TO 1F-16CM/AM-34-1-1 BMS (Avionik), 4.37](https://cdn.falcon-bms.com/docs/4.37/TO%201F-16CMAM-34-1-1%20BMS.pdf) (nur Inhaltsverzeichnis gelesen)
