@@ -120,6 +120,7 @@ void main() {
     vec3 V = eyePos() - v_rel;
     if (u_doubleSided > 0.5 && dot(n, V) < 0.0) n = -n;
     float leafAO = 1.0;
+#ifndef XR_QUALITY
     if (u_foliage > 0.5 && v_color.g > v_color.r) {
       // leaf clumps: lumpy normals and dark gaps between them, fading out with distance
       float fade = 1.0 - smoothstep(60.0, 400.0, length(V));
@@ -131,6 +132,7 @@ void main() {
       leafAO = mix(1.0, 0.55 + 0.6 * l0, fade);
       base.rgb *= mix(1.0, 0.8 + 0.4 * l0, fade);
     }
+#endif
     Surface s;
     s.albedo = base.rgb;
     s.normal = n;

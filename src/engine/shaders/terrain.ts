@@ -100,8 +100,13 @@ void main() {
   albedo = mix(albedo, natural, green);
   // rock on steep slopes (the geometric normal is smooth, so the boundary follows the landform)
   float slope = 1.0 - normalize(v_normal).y;
+#ifdef XR_QUALITY
+  float strata = vnoise(vec2(v_height * 0.09, (world.x + world.z) * 0.004));
+  float rockN = vnoise(world.xz * 0.02 + 11.0);
+#else
   float strata = fbm2(vec2(v_height * 0.09, (world.x + world.z) * 0.004), 3);
   float rockN = fbm2(world.xz * 0.02 + 11.0, 3);
+#endif
   float rock = smoothstep(0.27, 0.42, slope + (rockN - 0.5) * 0.14);
   float snowy = smoothstep(0.55, 0.75, dot(albedo, vec3(0.3, 0.5, 0.2)));
   vec3 rockCol = mix(vec3(0.16, 0.145, 0.13), vec3(0.3, 0.28, 0.25), strata) * (0.8 + 0.4 * rockN);
@@ -111,14 +116,20 @@ void main() {
   if (near > 0.0) {
     vec2 p = world.xz;
     float d1 = fbm2(p * 0.035, 4);
+#ifdef XR_QUALITY
+    float d2 = vnoise(p * 0.31 + 7.0);
+#else
     float d2 = fbm2(p * 0.31 + 7.0, 3);
+#endif
     albedo *= mix(1.0, 0.86 + 0.24 * d1 + 0.12 * (d2 - 0.5), near);
+#ifndef XR_QUALITY
     float e = 0.6;
     vec2 q = p * 0.05;
     float h0 = fbm2(q, 3);
     float nx = fbm2(q + vec2(e * 0.05, 0.0), 3) - h0;
     float nz = fbm2(q + vec2(0.0, e * 0.05), 3) - h0;
     n = normalize(n + vec3(-nx, 0.0, -nz) * (2.0 + 3.0 * rock) * near);
+#endif
   }
   // wet sand and muddy shore just above the water line
   float shore = 1.0 - smoothstep(0.2, 2.5, v_height);

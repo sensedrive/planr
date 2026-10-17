@@ -68,8 +68,8 @@ vec3 groundColor(vec2 rel) {
  * steps; returns the lit, hazed ground colour in rgb and coverage in a.
  */
 vec4 terrainReflection(vec3 p0, vec3 R) {
-#ifdef MULTIVIEW
-  const int N = 14;
+#ifdef XR_QUALITY
+  const int N = 12;
 #else
   const int N = 26;
 #endif
@@ -106,7 +106,12 @@ vec2 waveSlope(vec2 p, float fade) {
   float amp = 1.0;
   float freq = 0.035;
   vec2 dir = vec2(1.0, 0.3);
-  for (int i = 0; i < 6; i++) {
+#ifdef XR_QUALITY
+  const int OCT = 4;
+#else
+  const int OCT = 6;
+#endif
+  for (int i = 0; i < OCT; i++) {
     vec2 q = p * freq + dir * t * freq * 6.0;
     float e = 0.15;
     float n0 = vnoise(q);

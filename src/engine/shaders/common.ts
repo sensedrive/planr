@@ -2,6 +2,10 @@
 
 /** Frame uniforms (std140). Float offsets are mirrored in `FRAME` below. */
 export const frame = /* glsl */ `
+// headset rendering (multiview or per-eye with inline tonemapping) trades detail for frame rate
+#if defined(MULTIVIEW) || defined(INLINE_TONEMAP)
+#define XR_QUALITY
+#endif
 layout(std140) uniform Frame {
   mat4 u_viewProj[2];
   mat4 u_invViewProj[2];

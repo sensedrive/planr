@@ -316,6 +316,7 @@ export class Texture {
     this.width = opts.width;
     this.height = opts.height;
     this.layers = opts.layers ?? 1;
+    scratchUnit(gl);
     gl.bindTexture(target, this.handle);
     const mips = opts.filter === 'mipmap' ? Math.floor(Math.log2(Math.max(opts.width, opts.height))) + 1 : 1;
     if (target === gl.TEXTURE_2D_ARRAY || target === gl.TEXTURE_3D) gl.texStorage3D(target, mips, opts.format, opts.width, opts.height, this.layers);
@@ -337,6 +338,7 @@ export class Texture {
   /** Uploads a full level-0 image (or one layer) and optionally rebuilds the mip chain. */
   upload(data: ArrayBufferView | TexImageSource, layer = 0, x = 0, y = 0, w = this.width, h = this.height): void {
     const gl = this.dev.gl;
+    scratchUnit(gl);
     gl.bindTexture(this.target, this.handle);
     const [fmt, type] = uploadFormat(gl, this.opts.format);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
@@ -349,6 +351,7 @@ export class Texture {
 
   generateMipmap(): void {
     const gl = this.dev.gl;
+    scratchUnit(gl);
     gl.bindTexture(this.target, this.handle);
     gl.generateMipmap(this.target);
   }
@@ -356,6 +359,14 @@ export class Texture {
   dispose(): void {
     this.dev.gl.deleteTexture(this.handle);
   }
+}
+
+/**
+ * Texture creation and uploads bind on the last unit, which no program samples, so they never
+ * swap a texture under a bound shadow sampler (that is INVALID_OPERATION on the next draw).
+ */
+function scratchUnit(gl: WebGL2RenderingContext): void {
+  gl.activeTexture(gl.TEXTURE0 + 31); // WebGL2 guarantees 32 combined units
 }
 
 function uploadFormat(gl: WebGL2RenderingContext, f: number): [number, number] {
