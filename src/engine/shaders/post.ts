@@ -95,6 +95,16 @@ float h12(vec2 p) {
 
 void main() {
   vec3 c = texture(u_scene, v_uv).rgb;
+  // contrast-adaptive sharpening: restore crispness lost to MSAA resolve and half-res clouds,
+  // clamped to the neighbourhood so bright edges get no halos
+  vec2 px = 1.0 / vec2(textureSize(u_scene, 0));
+  vec3 n0 = texture(u_scene, v_uv + vec2(px.x, 0.0)).rgb;
+  vec3 n1 = texture(u_scene, v_uv - vec2(px.x, 0.0)).rgb;
+  vec3 n2 = texture(u_scene, v_uv + vec2(0.0, px.y)).rgb;
+  vec3 n3 = texture(u_scene, v_uv - vec2(0.0, px.y)).rgb;
+  vec3 lo = min(c, min(min(n0, n1), min(n2, n3)));
+  vec3 hi = max(c, max(max(n0, n1), max(n2, n3)));
+  c = clamp(c + (c - 0.25 * (n0 + n1 + n2 + n3)) * 0.35, lo, hi);
   vec3 b = texture(u_bloom, v_uv).rgb;
   c = mix(c, b, u_bloomStrength);
   if (u_raysStrength > 0.0) c += texture(u_rays, v_uv).rgb * u_raysStrength;

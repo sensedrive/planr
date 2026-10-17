@@ -66,9 +66,10 @@ vec3 agx(vec3 c) {
   c = inset * max(c, 0.0);
   c = clamp((log2(max(c, 1e-10)) + 12.47393) / 16.5, 0.0, 1.0);
   c = agxContrast(c);
-  // a touch of "punch": more saturation and contrast than the neutral base look
+  // look: between AgX's neutral base and its "punchy" variant (CDL power and saturation)
+  c = pow(max(c, 0.0), vec3(1.16));
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
-  c = l + 1.12 * (c - l);
+  c = l + 1.15 * (c - l);
   c = outset * c;
   // the curve outputs display-encoded values close to sRGB already
   return clamp(pow(max(c, 0.0), vec3(2.2)), 0.0, 1.0);
