@@ -674,5 +674,5 @@ function devMultiview(eye = 0, inline = true): string {
 if (import.meta.env.DEV)
   Object.assign(window, {
     devMultiview,
-    devLook, sim: { devView, useAircraft, renderer, scene, camera, sky, variants, aircraft, controls, actions, cameraRig, missions, settings, weather, OPTIONS, applyLive, startFlight } });
+    devLook, sim: { groundHeight, devView, useAircraft, renderer, scene, camera, sky, variants, aircraft, controls, actions, cameraRig, missions, settings, weather, OPTIONS, applyLive, startFlight } });
 (window as unknown as { ready: boolean }).ready = true;

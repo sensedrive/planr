@@ -403,7 +403,7 @@ export class Renderer {
     // sea
     const w = progs.water.use();
     bindLit(w);
-    w.tex('u_height', this.terrain.heightTex).f3('u_waterColor', env.waterColor[0], env.waterColor[1], env.waterColor[2]).f1('u_waves', env.waves);
+    w.tex('u_height', this.terrain.heightTex).tex('u_groundColor', this.terrain.colorTex).f3('u_waterColor', env.waterColor[0], env.waterColor[1], env.waterColor[2]).f1('u_waves', env.waves);
     const n = this.terrain.levels.length;
     const corners = new Float32Array(20);
     const texs = new Int32Array(20);
