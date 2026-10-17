@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { XRControllerSource } from '../core/xrSource';
 import { choiceAvailable, OPTIONS, type Settings } from '../game/settings';
 import type { MenuHandlers } from './menu';
 
@@ -32,7 +33,7 @@ export class VRMenu {
   private readonly m = new THREE.Matrix4();
 
   constructor(
-    renderer: THREE.WebGLRenderer,
+    renderer: { xr: XRControllerSource },
     rig: THREE.Group,
     parent: THREE.Object3D,
     private readonly settings: Settings,

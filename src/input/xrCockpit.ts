@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { XRControllerSource } from '../core/xrSource';
 import { XRControllerModelFactory } from 'three/examples/jsm/webxr/XRControllerModelFactory.js';
 import { XRHandModelFactory } from 'three/examples/jsm/webxr/XRHandModelFactory.js';
 import type { Controls3D, Handle } from '../cockpit/controls3d';
@@ -41,7 +42,7 @@ export class XRCockpitInput {
   private pressCooldown = 0;
 
   constructor(
-    renderer: THREE.WebGLRenderer,
+    renderer: { xr: XRControllerSource },
     private readonly rig: THREE.Group,
     private visuals: Controls3D,
     private readonly actions: Actions,
