@@ -15,10 +15,13 @@ interface GpuGeometry {
   indexType: number;
   hasIndex: boolean;
   versions: string;
-  instanceBuf?: WebGLBuffer;
-  instanceColorBuf?: WebGLBuffer;
-  instanceVersion?: number;
-  instanceColorVersion?: number;
+}
+
+interface GpuInstances {
+  buf: WebGLBuffer;
+  version: number;
+  colorBuf: WebGLBuffer | null;
+  colorVersion: number;
 }
 
 interface GpuTexture {
@@ -48,6 +51,7 @@ const SPRITE_GEO = (() => {
 
 export class MeshRenderer {
   private readonly geos = new WeakMap<THREE.BufferGeometry, GpuGeometry>();
+  private readonly instances = new WeakMap<THREE.InstancedMesh, GpuInstances>();
   private readonly texs = new WeakMap<THREE.Texture, GpuTexture>();
   private readonly white: Texture;
   readonly opaque: DrawItem[] = [];
@@ -183,28 +187,43 @@ export class MeshRenderer {
       this.geos.set(geo, g);
     }
     if (inst) {
-      gl.bindVertexArray(g.vao);
-      if (!g.instanceBuf || g.instanceVersion !== inst.instanceMatrix.version) {
-        if (!g.instanceBuf) g.instanceBuf = gl.createBuffer()!;
-        gl.bindBuffer(gl.ARRAY_BUFFER, g.instanceBuf);
-        gl.bufferData(gl.ARRAY_BUFFER, inst.instanceMatrix.array as Float32Array, gl.DYNAMIC_DRAW);
-        g.instanceVersion = inst.instanceMatrix.version;
-        for (let k = 0; k < 4; k++) {
-          gl.enableVertexAttribArray(4 + k);
-          gl.vertexAttribPointer(4 + k, 4, gl.FLOAT, false, 64, k * 16);
-          gl.vertexAttribDivisor(4 + k, 1);
-        }
+      // instance data belongs to the InstancedMesh: many meshes share one geometry (forest tiles)
+      let ib = this.instances.get(inst);
+      if (!ib) {
+        ib = { buf: gl.createBuffer()!, version: -1, colorBuf: null, colorVersion: -1 };
+        this.instances.set(inst, ib);
+        const own = ib;
+        inst.addEventListener('dispose', () => {
+          gl.deleteBuffer(own.buf);
+          if (own.colorBuf) gl.deleteBuffer(own.colorBuf);
+          this.instances.delete(inst);
+        });
       }
-      if (inst.instanceColor && (!g.instanceColorBuf || g.instanceColorVersion !== inst.instanceColor.version)) {
-        if (!g.instanceColorBuf) g.instanceColorBuf = gl.createBuffer()!;
-        gl.bindBuffer(gl.ARRAY_BUFFER, g.instanceColorBuf);
+      if (ib.version !== inst.instanceMatrix.version) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, ib.buf);
+        gl.bufferData(gl.ARRAY_BUFFER, inst.instanceMatrix.array as Float32Array, gl.DYNAMIC_DRAW);
+        ib.version = inst.instanceMatrix.version;
+      }
+      if (inst.instanceColor && ib.colorVersion !== inst.instanceColor.version) {
+        ib.colorBuf ??= gl.createBuffer()!;
+        gl.bindBuffer(gl.ARRAY_BUFFER, ib.colorBuf);
         // instance colours are linear in three.js already
         gl.bufferData(gl.ARRAY_BUFFER, inst.instanceColor.array as Float32Array, gl.DYNAMIC_DRAW);
-        g.instanceColorVersion = inst.instanceColor.version;
+        ib.colorVersion = inst.instanceColor.version;
+      }
+      gl.bindVertexArray(g.vao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, ib.buf);
+      for (let k = 0; k < 4; k++) {
+        gl.enableVertexAttribArray(4 + k);
+        gl.vertexAttribPointer(4 + k, 4, gl.FLOAT, false, 64, k * 16);
+        gl.vertexAttribDivisor(4 + k, 1);
+      }
+      if (inst.instanceColor && ib.colorBuf) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, ib.colorBuf);
         gl.enableVertexAttribArray(8);
         gl.vertexAttribPointer(8, 3, gl.FLOAT, false, 0, 0);
         gl.vertexAttribDivisor(8, 1);
-      } else if (!inst.instanceColor) {
+      } else {
         gl.disableVertexAttribArray(8);
         gl.vertexAttrib3f(8, 1, 1, 1);
       }

@@ -104,6 +104,13 @@ export class TerrainClipmap {
   update(x: number, z: number, budget = 6000): void {
     if (!this.source) return;
     this.spent = 0;
+    // a jump (restart, air start, teleport) further than strip updates can catch up: rebuild everything,
+    // since a refilled fine level would no longer nest inside lagging coarse ones
+    const jumped = this.levels.some((l, i) => {
+      const [tx, tz] = this.target(i, x, z);
+      return l.valid && Math.max(Math.abs(tx - l.cx), Math.abs(tz - l.cz)) > CELLS / 8;
+    });
+    if (jumped) for (const l of this.levels) l.valid = false;
     // levels never filled are rebuilt completely, coarse first so something is always drawn
     for (let i = this.levels.length - 1; i >= 0; i--) {
       const l = this.levels[i];
