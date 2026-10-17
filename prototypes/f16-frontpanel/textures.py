@@ -1,8 +1,10 @@
 """PROTOTYP (Ticket #10): malt Frontatlas, Leuchtmaske, MFD- und DED-Anzeigen mit Pillow."""
 
 import math
+import os
 
-from PIL import Image, ImageDraw, ImageFont
+import numpy as np
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 import layout as L
 
@@ -25,15 +27,43 @@ class Atlas:
     """Albedo und Leuchtmaske (Hinterleuchtung bei Nacht) teilen dieselbe planare Abbildung."""
 
     def __init__(self):
-        self.img = Image.new("RGB", (L.ATLAS_W, L.ATLAS_H), PANEL)
-        self.glow = Image.new("L", (L.ATLAS_W, L.ATLAS_H), 0)
+        size = (L.ATLAS_W, L.ATLAS_H)
+        self.img = Image.new("RGB", size, PANEL)
+        self.glow = Image.new("L", size, 0)
+        # Detaildurchgang (#14): Höhe für die Normal-Map, Rauheit (0..255 = 0..1)
+        self.height = Image.new("L", size, 128)
+        self.rough = Image.new("L", size, 196)
+        # Flächen unter Glas (Zifferblätter) bekommen keine Gebrauchsspuren
+        self.clean = Image.new("L", size, 0)
         self.d = ImageDraw.Draw(self.img)
         self.g = ImageDraw.Draw(self.glow)
+        self.hd = ImageDraw.Draw(self.height)
+        self.rd = ImageDraw.Draw(self.rough)
 
-    def rect(self, cx, cz, w, h, fill, outline=None, width=0):
+    def box_px(self, cx, cz, w, h):
         x0, y0 = L.atlas_px(cx - w / 2, cz + h / 2)
         x1, y1 = L.atlas_px(cx + w / 2, cz - h / 2)
-        self.d.rectangle([x0, y0, x1, y1], fill=fill, outline=outline, width=width)
+        return [x0, y0, x1, y1]
+
+    def rect(self, cx, cz, w, h, fill, outline=None, width=0, rough=None):
+        b = self.box_px(cx, cz, w, h)
+        self.d.rectangle(b, fill=fill, outline=outline, width=width)
+        if outline is not None:
+            # Fugen sind Rillen: tiefer und rauer
+            self.hd.rectangle(b, outline=40, width=width)
+            self.rd.rectangle(b, outline=235, width=width + 2)
+        if rough is not None and fill is not None:
+            self.rd.rectangle(b, fill=rough)
+
+    def worn_key(self, x, z, w, h):
+        """Gummitaste: matt, in der Mitte vom Daumen blank gerieben."""
+        self.rect(x, z, w, h, KEY, rough=225)
+        b = self.box_px(x, z, w * 0.62, h * 0.62)
+        self.rd.ellipse(b, fill=150)
+        blur = self.img.crop([int(v) for v in b]).point(lambda v: min(255, int(v * 1.12)))
+        mask = Image.new("L", blur.size, 0)
+        ImageDraw.Draw(mask).ellipse([0, 0, blur.width - 1, blur.height - 1], fill=110)
+        self.img.paste(blur, (int(b[0]), int(b[1])), mask.filter(ImageFilter.GaussianBlur(4)))
 
     def text(self, x, z, s, h_m, color=LABEL, glow=255, font=BOLD, squeeze=0.82, anchor="mm"):
         """Text mit Höhe h_m (Meter), schmal gesetzt wie Cockpit-Stencil."""
@@ -54,6 +84,9 @@ class Atlas:
             ox = cx - tmp.width / 2 if anchor == "mm" else cx
             pos = (int(ox), int(ly - tmp.height / 2))
             self.img.paste(Image.new("RGB", tmp.size, color), pos, tmp)
+            # Farbe der Beschriftung trägt etwas auf und ist glatter als der Lack
+            self.height.paste(150, pos + (pos[0] + tmp.width, pos[1] + tmp.height), tmp)
+            self.rough.paste(150, pos + (pos[0] + tmp.width, pos[1] + tmp.height), tmp)
             if glow:
                 self.glow.paste(Image.new("L", tmp.size, glow), pos, tmp)
 
@@ -83,16 +116,17 @@ def seams(a: Atlas):
 def mfd_housing(a: Atlas, cx, cz):
     a.rect(cx, cz, L.MFD, L.MFD, HOUSING)
     for x, z, w, h in L.osb_positions(cx, cz):
-        a.rect(x, z, w, h, KEY)
+        a.worn_key(x, z, w, h)
     for (dx, dz), name in zip(((-1, 1), (1, 1), (-1, -1), (1, -1)), ("GAIN", "SYM", "BRT", "CON")):
         a.text(cx + dx * 0.058, cz + dz * 0.046, name, 0.0032)
-        a.rect(cx + dx * 0.058, cz + dz * 0.058, 0.012, 0.012, KEY)
+        a.worn_key(cx + dx * 0.058, cz + dz * 0.058, 0.012, 0.012)
 
 
 def dial(a: Atlas, kind: str, x, z):
     cx, cy = L.atlas_px(x, z)
     r = L.m2px(0.037)
     a.d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=DIAL)
+    ImageDraw.Draw(a.clean).ellipse([cx - r, cy - r, cx + r, cy + r], fill=255)
     ring = L.m2px(L.GAUGE_R)
     a.d.ellipse([cx - ring, cy - ring, cx + ring, cy + ring], outline=(30, 31, 33), width=int(ring - r))
     if kind == "ASI":
@@ -152,14 +186,14 @@ def icp(a: Atlas):
     cx, cz, w, h = L.ICP
     a.rect(cx, cz, w, h, HOUSING)
     for name, big, small, x, z, kw, kh in L.icp_keys():
-        a.rect(x, z, kw, kh, KEY)
+        a.worn_key(x, z, kw, kh)
         if small:
             a.text(x, z + kh * 0.24, small, 0.0024)
             a.text(x, z - kh * 0.15, big, 0.0052)
         else:
             a.text(x, z, big, 0.0036 if len(big) > 2 else 0.0052)
     # DCS-Wippe links, Rädchen rechts
-    a.rect(cx - 0.072, cz - 0.0, 0.026, 0.026, KEY)
+    a.worn_key(cx - 0.072, cz - 0.0, 0.026, 0.026)
     a.text(cx - 0.072, cz + 0.02, "DCS", 0.0026)
     for i, name in enumerate(("SYM", "BRT", "DEPR\nRET")):
         a.text(cx + 0.075, cz + 0.024 - i * 0.022, name, 0.0024)
@@ -196,6 +230,9 @@ def screw_heads(a: Atlas):
         r = L.m2px(0.0036)
         a.d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(88, 90, 94), outline=(40, 41, 43), width=3)
         a.d.line([cx - r * 0.7, cy - r * 0.2, cx + r * 0.7, cy + r * 0.2], fill=(30, 30, 32), width=5)
+        a.hd.ellipse([cx - r, cy - r, cx + r, cy + r], fill=175)
+        a.hd.line([cx - r * 0.7, cy - r * 0.2, cx + r * 0.7, cy + r * 0.2], fill=60, width=6)
+        a.rd.ellipse([cx - r, cy - r, cx + r, cy + r], fill=110)
 
 
 def placards(a: Atlas):
@@ -205,7 +242,59 @@ def placards(a: Atlas):
     a.text(0.32, 0.20, "AR\nSTATUS", 0.003)
 
 
-def build_atlas(path_albedo: str, path_glow: str):
+def _noise(shape, cell, rng):
+    """Glattes Rauschen 0..1 mit Strukturgröße `cell` Pixel."""
+    h, w = shape
+    small = rng.random((max(2, h // cell), max(2, w // cell))).astype(np.float32)
+    img = Image.fromarray((small * 255).astype(np.uint8)).resize((w, h), Image.BICUBIC)
+    return np.asarray(img, dtype=np.float32) / 255
+
+
+def weather(a: Atlas):
+    """Gebrauchsspuren: fleckiger Lack, Schmutz in Fugen, Kratzer, Rauheitsvariation."""
+    rng = np.random.default_rng(16)
+    alb = np.asarray(a.img, dtype=np.float32)
+    h = np.asarray(a.height, dtype=np.float32)
+    r = np.asarray(a.rough, dtype=np.float32)
+    shape = h.shape
+    blotch = _noise(shape, 220, rng) * 0.6 + _noise(shape, 60, rng) * 0.4
+    fine = rng.normal(0, 1, shape).astype(np.float32)
+    # Schmutz sammelt sich in Rillen und Ecken: weichgezeichnete Rillenmaske
+    groove = (h < 90).astype(np.uint8) * 255
+    dirt = np.asarray(Image.fromarray(groove).filter(ImageFilter.GaussianBlur(10)), dtype=np.float32) / 255
+    m = 1 - np.asarray(a.clean, dtype=np.float32) / 255
+    shade = 1 + m * (0.07 * (blotch - 0.5) - 0.25 * dirt + 0.012 * fine)
+    alb = alb * shade[..., None]
+    # feine Kratzer: kurze helle Linien, gehäuft am unteren Panelrand
+    scratch = Image.new("L", (shape[1], shape[0]), 0)
+    sd = ImageDraw.Draw(scratch)
+    for _ in range(500):
+        x, y = rng.random() * shape[1], shape[0] * (0.35 + 0.65 * rng.random() ** 0.6)
+        ang, ln = rng.normal(0.2, 0.6), rng.uniform(8, 60)
+        sd.line([x, y, x + math.cos(ang) * ln, y + math.sin(ang) * ln], fill=int(rng.uniform(40, 120)), width=1)
+    sc = np.asarray(scratch, dtype=np.float32) / 255 * m
+    alb = alb + sc[..., None] * 28
+    a.img = Image.fromarray(np.clip(alb, 0, 255).astype(np.uint8))
+    # Höhe: leichte Orangenhaut im Lack, Kratzer als feine Rillen
+    hf = h + m * (5 * (_noise(shape, 6, rng) - 0.5) + 1.5 * fine) - sc * 25
+    a.height = Image.fromarray(np.clip(hf, 0, 255).astype(np.uint8))
+    rf = r + m * (30 * (blotch - 0.5) + 35 * dirt) - sc * 40
+    a.rough = Image.fromarray(np.clip(rf, 0, 255).astype(np.uint8))
+
+
+def normal_from_height(height: Image.Image, strength: float) -> Image.Image:
+    """Tangentenraum-Normal-Map (OpenGL/glTF: Grün zeigt nach oben) aus einer Höhenkarte."""
+    hf = np.asarray(height.filter(ImageFilter.GaussianBlur(0.8)), dtype=np.float32) / 255
+    gx = np.zeros_like(hf)
+    gy = np.zeros_like(hf)
+    gx[:, 1:-1] = (hf[:, 2:] - hf[:, :-2]) * 0.5
+    gy[1:-1, :] = (hf[:-2, :] - hf[2:, :]) * 0.5  # Bildzeilen laufen nach unten, v nach oben
+    n = np.stack([-gx * strength * 10, -gy * strength * 10, np.ones_like(hf)], -1)
+    n /= np.linalg.norm(n, axis=-1, keepdims=True)
+    return Image.fromarray(((n * 0.5 + 0.5) * 255).astype(np.uint8))
+
+
+def build_atlas(path_albedo: str, path_glow: str, path_normal: str | None = None, path_orm: str | None = None):
     a = Atlas()
     seams(a)
     for cx, cz in L.MFDS.values():
@@ -217,6 +306,11 @@ def build_atlas(path_albedo: str, path_glow: str):
     eyebrows(a)
     placards(a)
     screw_heads(a)
+    if path_normal:
+        weather(a)
+        normal_from_height(a.height, strength=float(os.environ.get("NORMAL_STRENGTH", "3.0"))).save(path_normal)
+        orm = Image.merge("RGB", (Image.new("L", a.rough.size, 255), a.rough, Image.new("L", a.rough.size, 0)))
+        orm.save(path_orm)
     a.img.save(path_albedo)
     a.glow.save(path_glow)
 

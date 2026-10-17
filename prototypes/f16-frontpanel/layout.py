@@ -99,5 +99,10 @@ def screws():
     for cx, cz in EYEBROWS.values():
         for dx in (-EYEBROW_SIZE[0] / 2 + 0.006, EYEBROW_SIZE[0] / 2 - 0.006):
             s.append((cx + dx, cz))
+    # Befestigungsschrauben der Rundinstrumente (Detaildurchgang #14)
+    for gx, gz in GAUGES.values():
+        for dx in (-0.036, 0.036):
+            for dz in (-0.036, 0.036):
+                s.append((gx + dx, gz + dz))
     s += [(-0.345, -0.138), (0.345, -0.138), (-0.345, 0.13), (0.345, 0.13), (-0.07, -0.138), (0.07, -0.138)]
     return s

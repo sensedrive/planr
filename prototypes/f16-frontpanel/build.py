@@ -64,7 +64,12 @@ def load_image(path, non_color=False):
     return img
 
 
-textures.build_atlas(f"{OUT}/front_albedo.png", f"{OUT}/front_glow.png")
+# Detaildurchgang (#14): Normal-Map, Rauheit, Gebrauchsspuren, feinere Formen; DETAIL=0 baut Stand #10
+DETAIL = os.environ.get("DETAIL", "1") != "0"
+if DETAIL:
+    textures.build_atlas(f"{OUT}/front_albedo.png", f"{OUT}/front_glow.png", f"{OUT}/front_normal.png", f"{OUT}/front_orm.png")
+else:
+    textures.build_atlas(f"{OUT}/front_albedo.png", f"{OUT}/front_glow.png")
 textures.build_mfd(f"{OUT}/mfd_l.png", "HSD")
 textures.build_mfd(f"{OUT}/mfd_r.png", "FCR")
 textures.build_ded(f"{OUT}/ded.png")
@@ -76,6 +81,18 @@ ATLAS.node_tree.links.new(_alb.outputs["Color"], _b.inputs["Base Color"])
 _glow = image_node(ATLAS, load_image(f"{OUT}/front_glow.png"), "UVMap", (-400, -100))
 ATLAS.node_tree.links.new(_glow.outputs["Color"], _b.inputs["Emission Color"])
 _b.inputs["Emission Strength"].default_value = 1.0
+if DETAIL:
+    _nt = ATLAS.node_tree
+    _n = image_node(ATLAS, load_image(f"{OUT}/front_normal.png", non_color=True), "UVMap", (-700, -300))
+    _nm = _nt.nodes.new("ShaderNodeNormalMap")
+    _nm.uv_map = "UVMap"
+    _nt.links.new(_n.outputs["Color"], _nm.inputs["Color"])
+    _nt.links.new(_nm.outputs["Normal"], _b.inputs["Normal"])
+    _orm = image_node(ATLAS, load_image(f"{OUT}/front_orm.png", non_color=True), "UVMap", (-700, 100))
+    _sep = _nt.nodes.new("ShaderNodeSeparateColor")
+    _nt.links.new(_orm.outputs["Color"], _sep.inputs["Color"])
+    _nt.links.new(_sep.outputs["Green"], _b.inputs["Roughness"])
+    _nt.links.new(_sep.outputs["Blue"], _b.inputs["Metallic"])
 
 M_PANEL = material("PanelSide", (34, 36, 38), 0.8)
 M_HOUSING = material("Housing", (24, 25, 27), 0.6)
@@ -124,12 +141,12 @@ def _finish(o, mat, bevel, segments=2):
     return o
 
 
-def box(name, x, y, z, sx, sy, sz, mat, bevel=0.0, rot=(0, 0, 0), static=True):
+def box(name, x, y, z, sx, sy, sz, mat, bevel=0.0, rot=(0, 0, 0), static=True, segments=2):
     bpy.ops.mesh.primitive_cube_add(size=1, location=(x, y, z), rotation=rot)
     o = bpy.context.object
     o.name = name
     o.scale = (sx, sy, sz)
-    _finish(o, mat, bevel)
+    _finish(o, mat, bevel, segments)
     (STATIC if static else SEPARATE).append(o)
     return o
 
@@ -195,10 +212,13 @@ for name, (cx, cz) in L.MFDS.items():
     h = box(f"{name}_housing", cx, MFD_FRONT / 2, cz, L.MFD, -MFD_FRONT, L.MFD, M_HOUSING, bevel=0.003)
     cut(h, box(f"{name}_recess", cx, MFD_FRONT, cz, L.MFD_DISPLAY + 0.004, 0.012, L.MFD_DISPLAY + 0.004, M_HOUSING))
     for i, (x, z, w, hh) in enumerate(L.osb_positions(cx, cz)):
-        box(f"{name}_osb{i}", x, MFD_FRONT - 0.0025, z, w, 0.005, hh, M_KEY, bevel=0.0012)
+        box(f"{name}_osb{i}", x, MFD_FRONT - 0.0025, z, w, 0.005, hh, M_KEY,
+            bevel=0.0018 if DETAIL else 0.0012, segments=3 if DETAIL else 2)
     for dx in (-1, 1):
         for dz in (-1, 1):
             box(f"{name}_rocker", cx + dx * 0.058, MFD_FRONT - 0.003, cz + dz * 0.058, 0.012, 0.006, 0.012, M_KEY, bevel=0.002)
+    if DETAIL:
+        plane(f"{name}_glass", cx, MFD_FRONT + 0.0012, cz, L.MFD_DISPLAY + 0.003, L.MFD_DISPLAY + 0.003, M_GLASS)
     plane(f"{name}_display", cx, MFD_FRONT + 0.0055, cz, L.MFD_DISPLAY, L.MFD_DISPLAY,
           display_material(f"{name}_page", f"{OUT}/{name.lower().replace('mfd_', 'mfd_')}.png"))
 
@@ -207,10 +227,22 @@ icx, icz, iw, ih = L.ICP
 ICP_FRONT = -L.ICP_DEPTH
 box("ICP", icx, ICP_FRONT / 2, icz, iw, L.ICP_DEPTH, ih, M_HOUSING, bevel=0.004)
 for name, big, small, x, z, kw, kh in L.icp_keys():
-    box(f"ICP_{name}", x, ICP_FRONT - 0.003, z, kw, 0.006, kh, M_KEY, bevel=0.0015)
+    box(f"ICP_{name}", x, ICP_FRONT - 0.003, z, kw, 0.006, kh, M_KEY,
+        bevel=0.0022 if DETAIL else 0.0015, segments=3 if DETAIL else 2)
 box("ICP_DCS", icx - 0.072, ICP_FRONT - 0.004, icz, 0.026, 0.008, 0.026, M_KEY, bevel=0.004)
 for i in range(3):
-    cyl(f"ICP_wheel{i}", icx + 0.088, ICP_FRONT - 0.002, icz + 0.024 - i * 0.022, 0.009, 0.007, M_KEY, axis="X", verts=24, bevel=0.001)
+    wheel = cyl(f"ICP_wheel{i}", icx + 0.088, ICP_FRONT - 0.002, icz + 0.024 - i * 0.022, 0.009, 0.007, M_KEY,
+                axis="X", verts=48 if DETAIL else 24, bevel=0.001)
+    if DETAIL:
+        # Rändelung: jede zweite Mantelkante nach innen
+        c = mathutils.Vector((icx + 0.088, ICP_FRONT - 0.002, icz + 0.024 - i * 0.022))
+        for v in wheel.data.vertices:
+            d = v.co - c
+            rad = math.hypot(d.y, d.z)
+            if rad > 0.0085:
+                k = round(math.atan2(d.z, d.y) / (2 * math.pi / 48))
+                if k % 2:
+                    v.co.y, v.co.z = c.y + d.y * 0.88, c.z + d.z * 0.88
 cyl("ICP_drift_base", icx - 0.072, ICP_FRONT - 0.002, icz - 0.04, 0.005, 0.004, M_METAL, bevel=0.0008)
 lever = cyl("ICP_drift_lever", icx - 0.072, ICP_FRONT - 0.009, icz - 0.036, 0.0016, 0.016, M_METAL, verts=16)
 _pivot = mathutils.Vector((icx - 0.072, ICP_FRONT - 0.009, icz - 0.036))
@@ -372,6 +404,8 @@ bpy.ops.export_scene.gltf(
     export_texcoords=True,
     export_normals=True,
     export_yup=True,
+    export_image_format="JPEG" if DETAIL else "AUTO",
+    export_jpeg_quality=90,
 )
 bpy.ops.wm.save_as_mainfile(filepath=f"{OUT}/f16_frontpanel.blend")
 print("fertig:", OUT)

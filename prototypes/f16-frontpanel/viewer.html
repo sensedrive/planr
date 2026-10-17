@@ -46,11 +46,12 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans+Condensed:wght@400;600&display=swap">
 
 <div id="loading">Lade Frontpanel …</div>
-<div class="note"><b>Prototyp, Ticket #10.</b> F-16C Block 50 Frontpanel, komplett per Blender-Skript erzeugt, AO gebacken. Ansicht vom Augpunkt (0,72 m vor dem Panel). Ziehen dreht den Blick, Mausrad zoomt.</div>
+<div class="note"><b>Prototyp, Tickets #10 und #14.</b> F-16C Block 50 Frontpanel, komplett per Blender-Skript erzeugt: AO gebacken, Normal-Map, Rauheit und Abnutzung aus dem Skript. Ansicht vom Augpunkt (0,72 m vor dem Panel). Ziehen dreht den Blick, Mausrad zoomt.</div>
 <div class="hud">
   <span class="tag">F-16C Blk 50 · Prototyp</span>
   <div class="group">
     <button id="ao" aria-pressed="true">AO</button>
+    <button id="detail" aria-pressed="true">Detail</button>
     <button id="night" aria-pressed="false">Nacht</button>
     <button id="seat">Sitzposition</button>
   </div>
@@ -124,6 +125,7 @@ placeSun(200);
 const stats = document.getElementById('stats');
 const aoMaps = new Map();
 let atlas = null;
+let detailMaps = null;
 const displays = [];
 // Artefakt-Hosting liefert kein .glb aus, daher liegt das GLB base64-kodiert als Text daneben
 fetch('f16_frontpanel.glb.txt').then((r) => r.text()).then((b64) => {
@@ -137,7 +139,7 @@ function onModel(gltf) {
     if (!o.isMesh) return;
     const m = o.material;
     if (m.aoMap) aoMaps.set(m, m.aoMap);
-    if (m.name === 'FrontAtlas') { atlas = m; m.emissive.set(0xcff5d8); m.emissiveIntensity = 0; }
+    if (m.name === 'FrontAtlas') { atlas = m; detailMaps = { normalMap: m.normalMap, roughnessMap: m.roughnessMap, roughness: m.roughness }; m.emissive.set(0xcff5d8); m.emissiveIntensity = 0; }
     if (/page$/.test(m.name)) displays.push(m);
     if (!m.transparent) { o.castShadow = true; o.receiveShadow = true; }
     else { m.depthWrite = false; m.envMapIntensity = 1.6; }
@@ -155,6 +157,17 @@ aoBtn.onclick = () => {
   const on = aoBtn.getAttribute('aria-pressed') !== 'true';
   aoBtn.setAttribute('aria-pressed', on);
   for (const [m, t] of aoMaps) { m.aoMap = on ? t : null; m.needsUpdate = true; }
+};
+// Detail aus = Stand von Ticket #10: keine Normal-Map, gleichmäßige Rauheit
+const detailBtn = document.getElementById('detail');
+detailBtn.onclick = () => {
+  const on = detailBtn.getAttribute('aria-pressed') !== 'true';
+  detailBtn.setAttribute('aria-pressed', on);
+  if (!atlas || !detailMaps) return;
+  atlas.normalMap = on ? detailMaps.normalMap : null;
+  atlas.roughnessMap = on ? detailMaps.roughnessMap : null;
+  atlas.roughness = on ? detailMaps.roughness : 0.8;
+  atlas.needsUpdate = true;
 };
 const nightBtn = document.getElementById('night');
 nightBtn.onclick = () => {
