@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Quest-Lasttest</title>
+    <style>
+      :root { --bg: #0b1118; --fg: #e8f0f8; --muted: #9fb3c8; --panel: rgba(10, 16, 24, 0.82); }
+      html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--fg); font: 14px ui-sans-serif, system-ui, sans-serif; }
+      canvas#view { display: block; width: 100vw; height: 100vh; }
+      #ui { position: fixed; top: 12px; left: 12px; right: 12px; max-width: 760px; padding: 14px 16px; border-radius: 10px; background: var(--panel); box-sizing: border-box; }
+      #ui p { margin: 0 0 10px; color: var(--muted); line-height: 1.5; }
+      #ui button { padding: 10px 16px; margin: 0 8px 8px 0; border: 1px solid var(--fg); border-radius: 6px; background: transparent; color: var(--fg); font: inherit; cursor: pointer; }
+      #ui button:disabled { opacity: 0.5; cursor: default; }
+      pre#out { margin: 6px 0 0; font: 12px/1.45 ui-monospace, Menlo, monospace; white-space: pre; overflow-x: auto; max-height: 50vh; }
+      body.xr #ui { display: none; }
+    </style>
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+    <div id="ui">
+      <p>Lasttest für das Quest-Budget (#28). Im Headset: <b>A</b> startet den Messlauf (11 Stufen, knapp 2 Minuten), <b>B</b> nächste Stufe, <b>X</b> wechselt 72/90 Hz, <b>Y</b> zentriert den Kopf. Nach dem Verlassen von VR steht die Tabelle hier.</p>
+      <button id="vr" disabled>VR wird geprüft …</button><button id="sweep">Messlauf am Bildschirm</button><button id="copy">Tabelle kopieren</button>
+      <pre id="out"></pre>
+    </div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
