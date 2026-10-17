@@ -1,0 +1,255 @@
+<title>F-16 Graumodell</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: Vollbild-3D-Ansicht aus dem Pilotensitz, Bedienleiste unten schwebend. Bewusst nur dunkel (Cockpit). */
+  :root {
+    --bg: #0b0d0e;
+    --panel: rgba(20, 23, 25, 0.86);
+    --line: #2b3134;
+    --fg: #e4e6e1;
+    --muted: #8d9693;
+    --accent: #7dff9c; /* Grün der F-16-Anzeigen */
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    --sans: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+    color-scheme: dark;
+  }
+  html, body { height: 100%; }
+  body { background: var(--bg); color: var(--fg); font-family: var(--sans); overflow: hidden; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  .hud {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    padding-block: 10px calc(10px + env(safe-area-inset-bottom, 0px));
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center;
+    background: var(--panel); border-top: 1px solid var(--line); backdrop-filter: blur(6px);
+  }
+  .tag { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+  .group { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  button {
+    font: 600 13px var(--sans); letter-spacing: 0.04em; color: var(--fg);
+    background: #1b1f21; border: 1px solid var(--line); border-radius: 3px; padding: 7px 11px; cursor: pointer;
+  }
+  button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  label { font-size: 13px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  input[type="range"] { width: 120px; accent-color: var(--accent); }
+  .stats { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-left: auto; font-variant-numeric: tabular-nums; }
+  .note {
+    position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px));
+    max-width: min(420px, calc(100% - 32px)); font-size: 12px; line-height: 1.45; color: var(--muted);
+    background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 8px 10px;
+  }
+  .note b { color: var(--fg); }
+  #loading { position: fixed; inset: 0; display: grid; place-items: center; font-family: var(--mono); color: var(--accent); pointer-events: none; }
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans+Condensed:wght@400;600&display=swap">
+
+<div id="loading">Lade Kabine …</div>
+<div class="note"><b>Graumodell, Ticket #17.</b> Ganze F-16-Kabine grob, dazu das fertige Frontpanel. Fast alle Maße sind geschätzt: Augpunkt, Konsolenhöhe, Stick und Throttle. In VR: rechter Stick hoch/runter verschiebt den Sitz in der Höhe, vor/zurück in der Länge, A setzt zurück. Die Controller zeigen, wo deine Hände sind.</div>
+<div class="hud">
+  <span class="tag">F-16C Blk 50 · Prototyp</span>
+  <div class="group">
+    <button id="canopy" aria-pressed="true">Canopy</button>
+    <button id="night" aria-pressed="false">Nacht</button>
+    <button id="seat">Sitzposition</button>
+    <button id="side">Seitenansicht</button>
+  </div>
+  <label for="eyez">Augenhöhe <input id="eyez" type="range" min="-10" max="10" value="0"></label>
+  <label for="eyey">Vor/zurück <input id="eyey" type="range" min="-10" max="10" value="0"></label>
+  <span class="tag" id="offset">±0 cm · ±0 cm</span>
+  <span class="stats" id="stats">–</span>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { VRButton } from 'three/addons/webxr/VRButton.js';
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.xr.enabled = true;
+// 'local': der Kopf steht beim Start im Ursprung, das Rig setzt ihn auf den Augpunkt
+renderer.xr.setReferenceSpaceType('local');
+document.body.prepend(renderer.domElement);
+navigator.xr?.isSessionSupported('immersive-vr').then((ok) => {
+  if (ok) document.body.appendChild(VRButton.createButton(renderer));
+}).catch(() => { /* kein WebXR im Rahmen */ });
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87a7c4);
+scene.fog = new THREE.Fog(0x87a7c4, 200, 2500);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+// Boden weit unten, damit der Kopf eine Bezugsebene hat
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), new THREE.MeshStandardMaterial({ color: 0x5d6b4a, roughness: 1 }));
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -400;
+scene.add(ground);
+
+// Augpunkt aus masse.py (Blender x, y, z) -> glTF (x, z, -y)
+const EYE = new THREE.Vector3(0, 0.44, 0.72);
+const TARGET = new THREE.Vector3(0, 0.06, 0);
+const offset = { z: 0, y: 0 }; // cm, Sitz höher/tiefer und vor/zurück
+const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.01, 4000);
+const rig = new THREE.Group();
+scene.add(rig);
+camera.position.copy(EYE);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.copy(TARGET);
+controls.enableDamping = true;
+controls.minDistance = 0.1;
+controls.maxDistance = 4;
+controls.update();
+window.__view = { camera, controls };
+
+const hemi = new THREE.HemisphereLight(0xbcd4f0, 0x2a2c26, 0.5);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff4e2, 3.0);
+sun.position.set(-1.2, 2.4, 1.0);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -1.2, right: 1.2, top: 1.2, bottom: -1.2, near: 0.1, far: 8 });
+sun.shadow.bias = -0.0004;
+sun.shadow.normalBias = 0.003;
+scene.add(sun, sun.target);
+const flood = new THREE.PointLight(0xd8ffe0, 0, 2.5, 2);
+flood.position.set(0, 0.38, 0.35);
+scene.add(flood);
+
+const stats = document.getElementById('stats');
+let atlas = null;
+let canopy = [];
+const displays = [];
+let tris = 0;
+let pending = 2;
+// Artefakt-Hosting liefert kein .glb aus, daher liegen die GLBs base64-kodiert als Text daneben
+function load(file) {
+  return fetch(file).then((r) => { if (!r.ok) throw new Error(file + ': ' + r.status); return r.text(); }).then((b64) => {
+    const bin = Uint8Array.from(atob(b64.trim()), (c) => c.charCodeAt(0));
+    new GLTFLoader().parse(bin.buffer, '', onModel, onError);
+  }).catch(onError);
+}
+load('f16_frontpanel.glb.txt');
+load('f16_graumodell.glb.txt');
+function onError(err) { document.getElementById('loading').textContent = 'Modell konnte nicht geladen werden: ' + (err.message || err); }
+function onModel(gltf) {
+  const root = gltf.scene;
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    const m = o.material;
+    if (m.name === 'FrontAtlas') { atlas = m; m.emissive.set(0xcff5d8); m.emissiveIntensity = 0; }
+    if (/page$/.test(m.name)) displays.push(m);
+    if (/^Canopy/.test(o.name) || m.name === 'CanopyGlas') canopy.push(o);
+    if (m.name === 'CanopyGlas') { m.side = THREE.DoubleSide; m.depthWrite = false; m.envMapIntensity = 2; }
+    else if (!m.transparent) { o.castShadow = true; o.receiveShadow = true; }
+    else { m.depthWrite = false; m.envMapIntensity = 1.6; }
+    tris += o.geometry.index ? o.geometry.index.count / 3 : o.geometry.attributes.position.count / 3;
+  });
+  scene.add(root);
+  if (--pending === 0) document.getElementById('loading').remove();
+  window.__tris = tris;
+}
+
+// ---- Sitzverstellung: verschiebt den Augpunkt, nicht das Modell ----
+const offsetTag = document.getElementById('offset');
+const sign = (v) => (v > 0 ? '+' : v < 0 ? '−' : '±') + Math.abs(v);
+function applyOffset() {
+  offset.z = THREE.MathUtils.clamp(offset.z, -10, 10);
+  offset.y = THREE.MathUtils.clamp(offset.y, -10, 10);
+  // vor = Richtung Panel = glTF -z
+  rig.position.set(EYE.x, EYE.y + offset.z / 100, EYE.z - offset.y / 100);
+  offsetTag.textContent = `Höhe ${sign(offset.z)} cm · vor ${sign(offset.y)} cm`;
+  document.getElementById('eyez').value = offset.z;
+  document.getElementById('eyey').value = offset.y;
+}
+applyOffset();
+document.getElementById('eyez').oninput = (e) => { offset.z = +e.target.value; applyOffset(); toSeat(); };
+document.getElementById('eyey').oninput = (e) => { offset.y = +e.target.value; applyOffset(); toSeat(); };
+function toSeat() {
+  camera.position.copy(rig.position);
+  controls.target.copy(rig.position).add(new THREE.Vector3().subVectors(TARGET, EYE));
+  controls.update();
+}
+
+// ---- VR: Kamera hängt am Rig, Controller zeigen die Hände ----
+const handGeo = new THREE.BoxGeometry(0.04, 0.05, 0.11);
+const handMat = new THREE.MeshStandardMaterial({ color: 0xd0a080, roughness: 0.7 });
+const hands = [0, 1].map((i) => {
+  const grip = renderer.xr.getControllerGrip(i);
+  const h = new THREE.Mesh(handGeo, handMat);
+  h.position.z = 0.02;
+  grip.add(h);
+  rig.add(grip);
+  return grip;
+});
+renderer.xr.addEventListener('sessionstart', () => { rig.add(camera); camera.position.set(0, 0, 0); });
+renderer.xr.addEventListener('sessionend', () => { scene.add(camera); toSeat(); });
+let stickCool = 0;
+function pollGamepads(dt) {
+  const s = renderer.xr.getSession();
+  if (!s) return;
+  stickCool -= dt;
+  for (const src of s.inputSources) {
+    const gp = src.gamepad;
+    if (!gp || src.handedness !== 'right') continue;
+    const [, , ax, ay] = gp.axes;
+    if (stickCool <= 0 && Math.abs(ay) > 0.6) { offset.z += ay < 0 ? 1 : -1; applyOffset(); stickCool = 0.15; }
+    if (stickCool <= 0 && Math.abs(ax) > 0.6) { offset.y += ax > 0 ? 1 : -1; applyOffset(); stickCool = 0.15; }
+    if (gp.buttons[4]?.pressed) { offset.z = 0; offset.y = 0; applyOffset(); }
+  }
+}
+
+const canopyBtn = document.getElementById('canopy');
+canopyBtn.onclick = () => {
+  const on = canopyBtn.getAttribute('aria-pressed') !== 'true';
+  canopyBtn.setAttribute('aria-pressed', on);
+  for (const o of canopy) o.visible = on;
+};
+const nightBtn = document.getElementById('night');
+nightBtn.onclick = () => {
+  const on = nightBtn.getAttribute('aria-pressed') !== 'true';
+  nightBtn.setAttribute('aria-pressed', on);
+  scene.background.set(on ? 0x05070c : 0x87a7c4);
+  scene.fog.color.set(on ? 0x05070c : 0x87a7c4);
+  scene.environmentIntensity = on ? 0.03 : 1;
+  sun.intensity = on ? 0 : 3.0;
+  hemi.intensity = on ? 0.02 : 0.5;
+  flood.intensity = on ? 0.06 : 0;
+  if (atlas) atlas.emissiveIntensity = on ? 0.9 : 0;
+  for (const d of displays) d.emissiveIntensity = on ? 0.55 : 1;
+};
+document.getElementById('seat').onclick = toSeat;
+document.getElementById('side').onclick = () => { camera.position.set(-2.2, 0.5, -0.1); controls.target.set(0, -0.1, 0.5); controls.update(); };
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+const clock = new THREE.Clock();
+let frame = 0;
+renderer.setAnimationLoop(() => {
+  const dt = clock.getDelta();
+  if (!renderer.xr.isPresenting) controls.update();
+  pollGamepads(dt);
+  renderer.render(scene, camera);
+  if (++frame % 30 === 0 && window.__tris) {
+    stats.textContent = `${Math.round(window.__tris / 1000)}k Dreiecke · ${renderer.info.render.calls} Draw Calls`;
+  }
+});
+</script>
