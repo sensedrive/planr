@@ -1,0 +1,67 @@
+<title>F-16 Schaltertest</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: Vollbild-3D-Ansicht aus dem Pilotensitz, Bedienleiste unten schwebend. Bewusst nur dunkel (Cockpit). */
+  :root {
+    --bg: #0b0d0e;
+    --panel: rgba(20, 23, 25, 0.86);
+    --line: #2b3134;
+    --fg: #e4e6e1;
+    --muted: #8d9693;
+    --accent: #7dff9c; /* Grün der F-16-Anzeigen */
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    --sans: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+    color-scheme: dark;
+  }
+  html, body { height: 100%; }
+  body { background: var(--bg); color: var(--fg); font-family: var(--sans); overflow: hidden; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  .hud {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    padding-block: 10px calc(10px + env(safe-area-inset-bottom, 0px));
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center;
+    background: var(--panel); border-top: 1px solid var(--line); backdrop-filter: blur(6px);
+  }
+  .tag { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+  .group { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  button {
+    font: 600 13px var(--sans); letter-spacing: 0.04em; color: var(--fg);
+    background: #1b1f21; border: 1px solid var(--line); border-radius: 3px; padding: 7px 11px; cursor: pointer;
+  }
+  button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  label { font-size: 13px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  input[type="range"] { width: 120px; accent-color: var(--accent); }
+  .stats { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-left: auto; font-variant-numeric: tabular-nums; }
+  .note {
+    position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px));
+    max-width: min(420px, calc(100% - 32px)); font-size: 12px; line-height: 1.45; color: var(--muted);
+    background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 8px 10px;
+  }
+  .note b { color: var(--fg); }
+  #loading { position: fixed; inset: 0; display: grid; place-items: center; font-family: var(--mono); color: var(--accent); pointer-events: none; }
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans+Condensed:wght@400;600&display=swap">
+
+<div id="loading">Lade Kabine …</div>
+<div class="note" id="note"><b>Schaltertest, Ticket #19.</b> Testpanel vorn auf der linken Konsole: MAIN PWR (Hebelsperre), JFS (federt zurück), ENG CONT und EPU (mit Schutzklappe), Drehschalter, Leuchttaster. Zwei Bedienarten: <b>Finger</b> (Controller-Spitze berührt und schiebt; Drehen mit Grip halten und Handgelenk drehen; Hebelsperre mit Grip) und <b>Strahl</b> (zielen, Stick hoch/runter kippt, Stick links/rechts dreht, Trigger drückt oder öffnet Klappen). A oder X wechselt die Bedienart. Am Desktop: Klick = vor, Rechtsklick = zurück, Mausrad = drehen.</div>
+<div class="hud">
+  <span class="tag">F-16C Blk 52 · Schaltertest</span>
+  <div class="group">
+    <button id="mode" aria-pressed="false">Bedienart: Finger</button>
+    <button id="canopy" aria-pressed="true">Canopy</button>
+    <button id="seat">Sitzposition</button>
+    <button id="look">Blick aufs Panel</button>
+  </div>
+  <span class="stats" id="stats">–</span>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+<script type="module" src="schalter.js"></script>
