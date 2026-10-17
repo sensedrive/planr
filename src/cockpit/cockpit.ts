@@ -46,6 +46,8 @@ export class Cockpit {
   ) {
     const g = this.group;
     g.name = 'cockpit';
+    // the new engine adds window light to everything below this group
+    g.userData.interior = true;
     const L = layout;
     const E = L.eye;
     const halfW = L.halfWidth;

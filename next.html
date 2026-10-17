@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>planr – VR-Flugsimulator (neue Engine)</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #9fc3e0; font-family: ui-sans-serif, system-ui, sans-serif; }
+      canvas#view { display: block; width: 100vw; height: 100vh; touch-action: none; }
+      #vr { position: fixed; bottom: 16px; right: 16px; padding: 12px 22px; border: 1px solid #fff; border-radius: 6px; background: rgba(0,0,0,0.25); color: #fff; font: 13px ui-sans-serif, system-ui, sans-serif; cursor: pointer; z-index: 20; }
+      #vr:disabled { opacity: 0.5; cursor: default; }
+      body.xr #vr { display: none; }
+      #hud {
+        position: fixed; top: 12px; left: 12px; padding: 10px 14px; border-radius: 8px;
+        background: rgba(10, 16, 24, 0.55); color: #e8f0f8; font: 13px/1.5 ui-monospace, Menlo, monospace;
+        pointer-events: none; white-space: pre; min-width: 190px;
+      }
+      #hud .warn { color: #ff5a4a; font-weight: 700; }
+      #help {
+        position: fixed; bottom: 12px; left: 12px; padding: 10px 14px; border-radius: 8px;
+        background: rgba(10, 16, 24, 0.55); color: #e8f0f8; font: 12px/1.6 ui-sans-serif, system-ui, sans-serif;
+        pointer-events: none;
+      }
+      #help kbd { background: rgba(255,255,255,0.15); border-radius: 3px; padding: 0 4px; font-family: ui-monospace, Menlo, monospace; }
+      #message {
+        position: fixed; top: 38%; left: 50%; transform: translate(-50%, -50%); padding: 16px 26px; border-radius: 10px;
+        background: rgba(10, 16, 24, 0.7); color: #fff; font-size: 22px; text-align: center; pointer-events: none; display: none;
+      }
+      #message small { display: block; font-size: 14px; opacity: 0.8; margin-top: 6px; }
+      body.xr #hud, body.xr #help, body.xr #message { display: none !important; }
+      #menu {
+        position: fixed; inset: 0; display: flex; padding: 16px;
+        background: rgba(8, 12, 18, 0.45); backdrop-filter: blur(3px); z-index: 10; overflow: auto;
+      }
+      body.xr #menu { display: none !important; }
+      #menu .card {
+        /* margin:auto centres it but, unlike align-items, keeps the top reachable when it overflows */
+        margin: auto; width: min(760px, 100%); background: rgba(14, 19, 26, 0.94); color: #e8eef4; border-radius: 16px;
+        padding: 22px 26px; box-shadow: 0 20px 60px rgba(0,0,0,0.4); box-sizing: border-box;
+      }
+      #menu h1 { margin: 0; font-size: 34px; letter-spacing: 0.5px; }
+      #menu .sub { margin: 2px 0 14px; color: #9aa7b5; font-size: 14px; }
+      #menu .row { display: flex; align-items: center; gap: 12px; padding: 6px 0; flex-wrap: wrap; }
+      #menu .label { width: 150px; color: #cfd8e0; font-size: 14px; }
+      #menu .choices { display: flex; gap: 6px; flex: 1; flex-wrap: wrap; }
+      #menu button {
+        flex: 1; min-width: 70px; padding: 9px 10px; border: 0; border-radius: 9px; cursor: pointer;
+        background: #252b33; color: #fff; font: 14px ui-sans-serif, system-ui, sans-serif;
+      }
+      #menu button:hover { background: #3a4452; }
+      #menu button.active { background: #3d8bfd; }
+      #menu button:disabled { opacity: 0.3; cursor: default; background: #252b33; }
+      #menu .footer { display: flex; gap: 10px; margin-top: 14px; }
+      #menu .footer button { padding: 14px; font-size: 17px; }
+      #menu .footer button.primary { background: #ff9a2a; color: #1a1206; font-weight: 700; flex: 2; }
+      #menu .best { color: #9aa7b5; font-size: 13px; min-height: 1em; margin: 10px 0 0; }
+      #menu .hint { color: #6f7c8a; font-size: 12px; margin: 10px 0 0; }
+    </style>
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+    <button id="vr" disabled>VR wird geprüft …</button>
+    <div id="hud"></div>
+    <div id="help">
+      <b>Steuerung</b><br />
+      <kbd>W</kbd>/<kbd>S</kbd> drücken/ziehen · <kbd>A</kbd>/<kbd>D</kbd> rollen · <kbd>Q</kbd>/<kbd>E</kbd> Seitenruder<br />
+      <kbd>Shift</kbd>/<kbd>X</kbd> oder Mausrad Gas · <kbd>B</kbd> Bremse · <kbd>F</kbd>/<kbd>V</kbd> Klappen · <kbd>G</kbd> Fahrwerk · <kbd>,</kbd>/<kbd>.</kbd> Trimmung<br />
+      Cockpit: Hebel, Trimmräder, Schalter anklicken (links +, rechts −) · <kbd>K</kbd> anlassen · <kbd>O</kbd> Autopilot · <kbd>N</kbd> Landelicht<br />
+      <kbd>C</kbd> Kamera · Maus ziehen umsehen · <kbd>R</kbd> Neustart · <kbd>L</kbd> Luftstart · <kbd>P</kbd> Pause · <kbd>M</kbd> Ton · <kbd>H</kbd> Hilfe · <kbd>Esc</kbd> Menü
+    </div>
+    <div id="message"></div>
+    <script type="module" src="/src/next/main.ts"></script>
+  </body>
+</html>
