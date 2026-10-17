@@ -133,6 +133,22 @@ void main() {
   s.occlusion = 1.0;
   s.sunVisibility = sunShadow(v_rel, v_normal);
   vec3 c = shade(s, v_rel, v_height);
+  // at night: villages and farms, clusters of warm lights in flat, dry lowland
+  float night = u_misc.x;
+  if (night > 0.0 && dist < 30000.0 && v_height > 2.0 && v_height < 900.0 && slope < 0.12) {
+    vec2 wp = v_rel.xz + u_originAbs.xz;
+    float village = smoothstep(0.52, 0.72, fbm2(wp * 0.00035 + 7.0, 3));
+    vec2 id = floor(wp / 40.0);
+    float h = hash12(id);
+    if (h < village * 0.55 + 0.01) {
+      vec2 lp = (id + 0.15 + 0.7 * hash22(id + 3.1)) * 40.0;
+      float r = max(1.0, dist * 0.0024);   // at least about a pixel wide
+      float d = length(wp - lp);
+      float glow = exp(-d * d / (r * r) * 1.5) * min(1.0, 4.0 / r);
+      vec3 tint = mix(vec3(1.0, 0.55, 0.2), vec3(1.0, 0.82, 0.55), fract(h * 37.0));
+      c += tint * glow * night * 2.5 * (0.6 / u_sunColor.w);
+    }
+  }
   writeColor(applyClouds(applyAerial(c, v_rel), v_rel), 1.0);
 }
 `;

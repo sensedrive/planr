@@ -108,8 +108,11 @@ void main() {
   }
   if (base.a < u_material.w) discard;
   vec3 c;
+  // unlit colours and emissive parts (lamps, displays, glowing signs) are display-referred: keep their
+  // on-screen brightness independent of the eye's exposure, or night lights would blow out
+  float displayScale = 0.6 / u_sunColor.w;
   if (u_unlit > 0.5) {
-    c = base.rgb + u_emissive;
+    c = (base.rgb + u_emissive) * displayScale;
   } else {
     vec3 n = normalize(v_normal);
     if (u_flat > 0.5) n = normalize(cross(dFdx(v_rel), dFdy(v_rel)));
@@ -132,7 +135,7 @@ void main() {
     s.normal = n;
     s.roughness = u_material.x;
     s.metalness = u_material.y;
-    s.emissive = u_emissive;
+    s.emissive = u_emissive * displayScale;
     s.occlusion = v_ao * leafAO;
     s.sunVisibility = u_receiveShadow > 0.5 ? sunShadow(v_rel, n) : 1.0;
     float hM = u_origin.w + v_rel.y;
