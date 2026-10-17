@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { runwayLocal } from './airports';
 import { mulberry32, noiseD } from './noise';
 import { scenario } from './scenario';
@@ -15,27 +15,56 @@ function coloured(geo: THREE.BufferGeometry, color: number): THREE.BufferGeometr
   const col = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) col.set([c.r, c.g, c.b], i * 3);
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  // untextured: drop uvs so every part has the same attributes for merging
+  geo.deleteAttribute('uv');
   return geo.index ? geo.toNonIndexed() : geo;
 }
 
-/** Spruce: two stacked cones on a trunk, 1 unit ≈ 1 m, base at y = 0. */
+/** Spruce: three stacked cones on a trunk, 1 unit ≈ 1 m, base at y = 0. */
 function conifer(): THREE.BufferGeometry {
   return mergeGeometries([
-    coloured(new THREE.CylinderGeometry(0.25, 0.35, 3, 4, 1, true).translate(0, 1.5, 0), 0x4a3828),
-    coloured(new THREE.ConeGeometry(3.2, 8, 6, 1, true).translate(0, 6, 0), 0x2d4d2c),
-    coloured(new THREE.ConeGeometry(2.3, 6, 6, 1, true).translate(0, 10.5, 0), 0x335a32),
+    coloured(new THREE.CylinderGeometry(0.25, 0.35, 3, 5, 1, true).translate(0, 1.5, 0), 0x4a3828),
+    coloured(new THREE.ConeGeometry(3.3, 6.5, 9, 1, true).translate(0, 5.2, 0), 0x2d4d2c),
+    coloured(new THREE.ConeGeometry(2.6, 5.5, 9, 1, true).rotateY(0.35).translate(0, 8.4, 0), 0x31532f),
+    coloured(new THREE.ConeGeometry(1.7, 4.5, 8, 1, true).rotateY(0.7).translate(0, 11.4, 0), 0x355b33),
   ])!;
 }
 
-/** Broadleaf: round crown on a trunk. */
+/** A lumpy leaf clump: a subdivided icosahedron with its surface pushed in and out. */
+function clump(radius: number, seed: number): THREE.BufferGeometry {
+  const g = new THREE.IcosahedronGeometry(radius, 1);
+  g.deleteAttribute('normal');
+  g.deleteAttribute('uv');
+  const m = mergeVertices(g);
+  const p = m.getAttribute('position') as THREE.BufferAttribute;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    const k = 1 + 0.16 * Math.sin(v.x * 1.7 + seed) * Math.sin(v.y * 1.9 + seed * 2.1) * Math.sin(v.z * 1.5 + seed * 0.7);
+    v.multiplyScalar(k);
+    p.setXYZ(i, v.x, v.y, v.z);
+  }
+  m.computeVertexNormals();
+  return m;
+}
+
+/** Broadleaf: a crown of three clumps on a trunk. */
 function broadleaf(): THREE.BufferGeometry {
-  const crown = new THREE.IcosahedronGeometry(3.6, 0);
-  crown.scale(1, 0.85, 1).translate(0, 7.5, 0);
-  return mergeGeometries([coloured(new THREE.CylinderGeometry(0.3, 0.45, 5, 4, 1, true).translate(0, 2.5, 0), 0x4f3b2a), coloured(crown, 0x4b7a34)])!;
+  const main = clump(3.4, 1).scale(1, 0.85, 1).translate(0, 7.6, 0);
+  const side = clump(2.2, 2).translate(1.9, 6.4, 0.6);
+  const top = clump(2.0, 3).translate(-0.9, 9.3, -0.7);
+  return mergeGeometries([
+    coloured(new THREE.CylinderGeometry(0.3, 0.45, 5, 5, 1, true).translate(0, 2.5, 0), 0x4f3b2a),
+    coloured(main, 0x4b7a34),
+    coloured(side, 0x47733a),
+    coloured(top, 0x52833a),
+  ])!;
 }
 
 const GEOS = { conifer: conifer(), broadleaf: broadleaf() };
 const material = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+// the new engine shades these as foliage (rounded crowns, wind, translucency)
+material.userData.foliage = true;
 
 interface Tile {
   meshes: THREE.InstancedMesh[];

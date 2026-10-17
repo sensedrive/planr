@@ -336,7 +336,9 @@ export class MeshRenderer {
       const rough = mat.type === 'MeshStandardMaterial' || mat.type === 'MeshPhysicalMaterial' ? mat.roughness : mat.type === 'MeshPhongMaterial' ? Math.sqrt(2 / (mat.shininess + 2)) : 0.85;
       p.f4('u_material', rough, mat.metalness ?? 0, tex ? 1 : 0, mat.alphaTest ?? 0);
       p.f1('u_unlit', unlit ? 1 : 0);
-      p.f1('u_flat', mat.flatShading || !geo.attributes.normal ? 1 : 0);
+      const foliage = mat.userData.foliage === true;
+      p.f1('u_foliage', foliage ? 1 : 0);
+      p.f1('u_flat', !foliage && (mat.flatShading || !geo.attributes.normal) ? 1 : 0);
       p.f1('u_doubleSided', mat.side === THREE.DoubleSide ? 1 : 0);
       p.f1('u_receiveShadow', 1);
       p.f1('u_interior', item.interior ? 1 : 0);
