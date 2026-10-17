@@ -1,5 +1,5 @@
 import { type Defines, type Device, type Program, Target, type Texture } from '../gl/device';
-import { cloudFS, cloudVS, noiseGenFS } from '../shaders/clouds';
+import { cloudFS, cloudShadowFS, cloudVS, noiseGenFS } from '../shaders/clouds';
 import { fullscreenVS } from '../shaders/common';
 
 export interface CloudSettings {
@@ -19,6 +19,11 @@ export class Clouds {
   depth: Texture | null = null;
   private targets: { w: number; h: number; layer0: Target; multiview: WebGLFramebuffer | null } | null = null;
   private frame = 0;
+  readonly shadow: Texture;
+  private readonly shadowTarget: Target;
+  private readonly shadowProgram: Program;
+  /** world rectangle the shadow map covers: centre x, z, extent, on */
+  readonly shadowRect = new Float32Array(4);
 
   constructor(private readonly dev: Device) {
     const gl = dev.gl;
@@ -46,6 +51,29 @@ export class Clouds {
       }
     }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this.shadow = dev.texture2D({ width: 256, height: 256, format: gl.RGBA8 });
+    this.shadowTarget = new Target(dev, 256, 256, [this.shadow], null);
+    this.shadowProgram = dev.program('cloud-shadow', fullscreenVS, cloudShadowFS);
+  }
+
+  /** Cloud shadow map around the camera (world x/z), 24 km across. */
+  renderShadow(x: number, z: number, base: number, top: number, coverage: number, density: number): void {
+    const gl = this.dev.gl;
+    const extent = 24000;
+    const snap = extent / 256;
+    const cx = Math.round(x / snap) * snap;
+    const cz = Math.round(z / snap) * snap;
+    this.shadowRect.set([cx, cz, extent, 1]);
+    this.shadowTarget.bind();
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.BLEND);
+    this.shadowProgram
+      .use()
+      .tex('u_shape', this.shape)
+      .tex('u_detail', this.detail)
+      .f4('u_cloudParams', base, top, coverage, density)
+      .f4('u_rect', cx, cz, extent, 0);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 
   programs(defines: Defines): Program {

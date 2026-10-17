@@ -8,7 +8,6 @@ uniform highp sampler2DArrayShadow u_shadowMap;
 uniform highp sampler2DShadow u_terrainShadow;
 uniform mat4 u_terrainShadowMat;
 uniform float u_shadowsOn;
-uniform float u_debugShadow;
 
 float pcf(vec3 c, float layer, float r) {
   float t = u_cascade.w * r;
@@ -20,16 +19,17 @@ float pcf(vec3 c, float layer, float r) {
   return s * 0.25;
 }
 
-/** Sun visibility for a camera-relative position (1 = lit). */
-float sunShadow(vec3 rel, vec3 n) {
+#include <cloud-shadow>
+
+/** Shadow maps: terrain and cascades (1 = lit). */
+float sunShadowGeometry(vec3 rel, vec3 n) {
   if (u_shadowsOn < 0.5) return 1.0;
   float d = length(rel - eyePos());
   float vis = 1.0;
   // terrain-scale shadow map: mountains shading valleys and airfields. Its coarse terrain lies above
   // the fine one in hollows, so only occluders well above (towards the sun) count.
   vec4 tp = u_terrainShadowMat * vec4(rel + u_sunDir.xyz * 45.0 + n * 4.0, 1.0);
-  if (u_debugShadow != 1.0 && all(lessThan(abs(tp.xy - 0.5), vec2(0.5)))) vis = texture(u_terrainShadow, tp.xyz);
-  if (u_debugShadow == 2.0) return vis;
+  if (all(lessThan(abs(tp.xy - 0.5), vec2(0.5)))) vis = texture(u_terrainShadow, tp.xyz);
   for (int i = 0; i < 3; i++) {
     if (d < u_cascade[i]) {
       float bias = 0.02 * float(i + 1);
@@ -43,6 +43,11 @@ float sunShadow(vec3 rel, vec3 n) {
     }
   }
   return vis;
+}
+
+/** Sun visibility for a camera-relative position (1 = lit), clouds included. */
+float sunShadow(vec3 rel, vec3 n) {
+  return cloudShadow(rel) * sunShadowGeometry(rel, n);
 }
 `;
 
@@ -111,6 +116,19 @@ vec3 shade(Surface s, vec3 rel, float heightM) {
   vec3 R = reflect(-V, N);
   vec3 env = R.y > 0.0 ? skyRadiance(normalize(vec3(R.x, max(R.y, 0.02), R.z))) : skyAmbient(vec3(0.0, 1.0, 0.0)) * 0.08;
   ambient += env * envBRDF(f0, s.roughness, NoV) * s.occlusion * (1.0 - s.roughness * 0.6);
+  // landing light
+  vec3 toL = u_spotPos.xyz - rel;
+  float dl = length(toL);
+  if (u_spotColor.r > 0.0 && dl < u_spotPos.w) {
+    vec3 Ls = toL / dl;
+    float cone = smoothstep(u_spotDir.w, u_spotColor.w, dot(-Ls, u_spotDir.xyz));
+    float att = cone / (dl * dl + 1.0) * pow(clamp(1.0 - pow(dl / u_spotPos.w, 4.0), 0.0, 1.0), 2.0);
+    float NoLs = clamp(dot(N, Ls), 0.0, 1.0);
+    vec3 Hs = normalize(V + Ls);
+    vec3 Fs = F_Schlick(f0, clamp(dot(V, Hs), 0.0, 1.0));
+    vec3 specS = Fs * D_GGX(clamp(dot(N, Hs), 0.0, 1.0), a) * V_SmithGGX(NoV, NoLs, a);
+    direct += (diffuse * (1.0 - Fs) / PI + specS) * u_spotColor.rgb * att * NoLs;
+  }
   return direct + ambient + s.emissive;
 }
 `;

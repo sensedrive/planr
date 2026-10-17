@@ -85,18 +85,11 @@ void main() {
 }
 `;
 
-export const cloudFS = /* glsl */ `
-#include <frame>
-#include <atmosphere-common>
-#include <atmosphere-lookup>
-#include <noise>
+/** Cloud density field shared by the march, the shadow map and nothing else. */
+export const cloudDensity = /* glsl */ `
 uniform highp sampler3D u_shape;
 uniform highp sampler3D u_detail;
 uniform vec4 u_cloudParams;     // x: base (m), y: top (m), z: coverage, w: density
-uniform vec4 u_cloudSteps;      // x: primary steps, y: light steps, z: max distance (m), w: frame index
-in vec2 v_ndc;
-layout(location = 0) out vec4 outLight;
-layout(location = 1) out vec4 outDepth;
 
 const float SHAPE_SCALE = 1.0 / 4200.0;
 const float DETAIL_SCALE = 1.0 / 900.0;
@@ -127,6 +120,20 @@ float density(vec3 wp, float h, bool cheap) {
   shape = clamp((shape - detail * 0.32 * (1.0 - shape)) / (1.0 - detail * 0.32 + 1e-3), 0.0, 1.0);
   return shape * u_cloudParams.w;
 }
+
+
+`;
+
+export const cloudFS = /* glsl */ `
+#include <frame>
+#include <atmosphere-common>
+#include <atmosphere-lookup>
+#include <noise>
+#include <cloud-density>
+uniform vec4 u_cloudSteps;      // x: primary steps, y: light steps, z: max distance (m), w: frame index
+in vec2 v_ndc;
+layout(location = 0) out vec4 outLight;
+layout(location = 1) out vec4 outDepth;
 
 float hg(float c, float g) {
   float g2 = g * g;
@@ -231,5 +238,49 @@ vec3 applyClouds(vec3 c, vec3 rel) {
   // fade in over the cloud's front zone, so terrain inside a cloud fogs over gradually
   float k = smoothstep(front, front + 400.0, d);
   return mix(c, c * cl.a + cl.rgb, k);
+}
+`;
+
+/** Transmittance of the cloud layer towards the sun, on a world-aligned grid at cloud-base height. */
+export const cloudShadowFS = /* glsl */ `
+#include <frame>
+#include <noise>
+#include <cloud-density>
+uniform vec4 u_rect;            // xy: centre (world m), z: extent (m)
+in vec2 v_uv;
+out vec4 fragColor;
+void main() {
+  vec3 L = u_sunDir.xyz;
+  if (L.y < 0.03) { fragColor = vec4(1.0); return; }
+  vec3 q = vec3(u_rect.xy + (v_uv - 0.5) * u_rect.z, u_cloudParams.x).xzy;
+  float len = (u_cloudParams.y - u_cloudParams.x) / L.y;
+  float od = 0.0;
+  const int N = 8;
+  for (int i = 0; i < N; i++) {
+    vec3 p = q + L * len * (float(i) + 0.5) / float(N);
+    od += density(p, heightFraction(p.y), true) * 0.03 * len / float(N);
+  }
+  fragColor = vec4(exp(-od * 0.8), 0.0, 0.0, 1.0);
+}
+`;
+
+/** Scene lookup of the cloud shadow (inside <shadows>). */
+export const cloudShadowLookup = /* glsl */ `
+uniform sampler2D u_cloudShadow;
+uniform vec4 u_cloudShadowRect;  // xy: centre (world m), z: extent (m), w: on
+uniform vec2 u_cloudSlab;        // base, top (m)
+float cloudShadow(vec3 rel) {
+  if (u_cloudShadowRect.w < 0.5) return 1.0;
+  vec3 p = rel + u_originAbs.xyz;
+  if (p.y > u_cloudSlab.y) return 1.0;
+  vec3 L = u_sunDir.xyz;
+  if (L.y < 0.03) return 1.0;
+  vec2 q = p.xz + L.xz / L.y * (u_cloudSlab.x - p.y);
+  vec2 uv = (q - u_cloudShadowRect.xy) / u_cloudShadowRect.z + 0.5;
+  if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return 1.0;
+  float t = texture(u_cloudShadow, uv).r;
+  // inside the layer only part of the column lies above
+  float inside = clamp((p.y - u_cloudSlab.x) / (u_cloudSlab.y - u_cloudSlab.x), 0.0, 1.0);
+  return mix(t, 1.0, inside);
 }
 `;

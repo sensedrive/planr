@@ -81,10 +81,16 @@ export class MeshRenderer {
     this.opaque.length = 0;
     this.transparent.length = 0;
     this.casters.length = 0;
+    this.spot = null;
     if (viewProjWorld) this.frustum.setFromProjectionMatrix(this.projScreen.copy(viewProjWorld));
     const visit = (o: THREE.Object3D) => {
       if (!o.visible) return;
       const r = o as THREE.Mesh;
+      const sl = o as THREE.SpotLight;
+      if (sl.isSpotLight && sl.intensity > 0) {
+        this.spot = sl;
+        return;
+      }
       if (r.isMesh || (o as THREE.Line).isLine || (o as THREE.Points).isPoints || (o as THREE.Sprite).isSprite) {
         const geo = (o as THREE.Mesh).geometry ?? SPRITE_GEO;
         if (!geo.boundingSphere) geo.computeBoundingSphere();
@@ -362,6 +368,8 @@ export class MeshRenderer {
   readonly camRight = new THREE.Vector3(1, 0, 0);
   readonly camUp = new THREE.Vector3(0, 1, 0);
   pointScale = 1;
+  /** the brightest visible spot light (landing light), if any */
+  spot: THREE.SpotLight | null = null;
 }
 
 function spriteMatrix(s: THREE.Sprite, out: Float32Array, origin: ArrayLike<number>, right: THREE.Vector3, up: THREE.Vector3): void {

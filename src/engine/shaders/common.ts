@@ -18,6 +18,9 @@ layout(std140) uniform Frame {
   vec4 u_wind;          // xy: cloud drift (m), zw: water wave drift
   vec4 u_originAbs;     // floating origin in world metres (float32: fine for large-scale noise)
   vec4 u_viewOffset;    // xy: viewport origin of this view in the framebuffer (pixels)
+  vec4 u_spotPos;       // landing light: xyz camera-relative, w: range (m)
+  vec4 u_spotDir;       // xyz: direction, w: cos of the outer cone angle
+  vec4 u_spotColor;     // rgb: intensity, w: cos of the inner cone angle
 };
 
 vec3 eyePos() { return u_eye[VIEW_ID].xyz; }
@@ -39,7 +42,10 @@ export const FRAME = {
   wind: 152,
   originAbs: 156,
   viewOffset: 160,
-  size: 164,
+  spotPos: 164,
+  spotDir: 168,
+  spotColor: 172,
+  size: 176,
 };
 
 /** Colour handling: filmic tonemapping (AgX) and output encoding. */

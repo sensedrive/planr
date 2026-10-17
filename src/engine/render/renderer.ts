@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { BLOCK, type Defines, Device, type Program, renderbuffer, Target, type Texture, UniformBuffer } from '../gl/device';
 import { type Fov, invert, lookDir, multiply, ortho, projection } from '../math';
 import { atmosphereCommon, atmosphereLookup } from '../shaders/atmosphere';
-import { cloudLookup } from '../shaders/clouds';
+import { cloudDensity, cloudLookup, cloudShadowLookup } from '../shaders/clouds';
 import { FRAME, frame, fullscreenVS, noise, output, tonemap } from '../shaders/common';
 import { lighting, shadows } from '../shaders/lighting';
 import { compositeFS, downFS, upFS, visionFS, visionVS } from '../shaders/post';
@@ -102,7 +102,6 @@ export class Renderer {
   private xrTargets = new Map<WebGLTexture, { fb: WebGLFramebuffer; depth: WebGLTexture }>();
   private readonly post: { down: Program; up: Program; composite: Program };
   shadowsEnabled = true;
-  debugShadow = 0;
   shadowSize: number;
   /** terrain samples the clipmap may compute per frame */
   terrainBudget = 6000;
@@ -125,6 +124,8 @@ export class Renderer {
     dev.addInclude('shadows', shadows);
     dev.addInclude('lighting', lighting);
     dev.addInclude('clouds', cloudLookup);
+    dev.addInclude('cloud-density', cloudDensity);
+    dev.addInclude('cloud-shadow', cloudShadowLookup);
 
     this.frameUbo = new UniformBuffer(gl, FRAME.size, BLOCK.frame);
     this.shadowUbo = new UniformBuffer(gl, FRAME.size, BLOCK.frame);
@@ -277,6 +278,18 @@ export class Renderer {
     this.meshes.camRight.copy(right);
     this.meshes.camUp.copy(up);
 
+    const spot = this.meshes.spot;
+    if (spot) {
+      const sp = new THREE.Vector3().setFromMatrixPosition(spot.matrixWorld);
+      const st = new THREE.Vector3().setFromMatrixPosition(spot.target.matrixWorld);
+      const dir = st.sub(sp).normalize();
+      // three.js candela → this renderer's units (sun = 10): scaled to look right at night
+      const I = spot.intensity * 0.0015;
+      f.set([sp.x - o[0], sp.y - o[1], sp.z - o[2], spot.distance || 500], FRAME.spotPos);
+      f.set([dir.x, dir.y, dir.z, Math.cos(spot.angle)], FRAME.spotDir);
+      f.set([spot.color.r * I, spot.color.g * I, spot.color.b * I, Math.cos(spot.angle * (1 - spot.penumbra))], FRAME.spotColor);
+    }
+
     const multiview = out.kind === 'xr-multiview';
     const inline = out.kind !== 'canvas';
     const progs = this.scenePrograms(multiview, inline);
@@ -292,6 +305,11 @@ export class Renderer {
     const cloudsOn = this.cloudsEnabled && env.coverage > 0.02;
     const cs = out.kind === 'canvas' ? this.cloudDesktop : this.cloudXR;
     const cloudDensity = env.overcast > 0.5 ? 1.6 : 1;
+    if (cloudsOn) {
+      this.frameUbo.flush();
+      gl.bindVertexArray(this.emptyVao);
+      this.clouds.renderShadow(o[0], o[2], env.cloudBase, env.cloudTop, env.coverage, cloudDensity);
+    } else this.clouds.shadowRect[3] = 0;
     const drawClouds = (w: number, h: number, mv: boolean) => {
       if (!cloudsOn) return;
       this.clouds.ensure(Math.max(1, Math.round(w * cs.scale)), Math.max(1, Math.round(h * cs.scale)), mv);
@@ -365,12 +383,13 @@ export class Renderer {
 
     const bindClouds = (p: Program) => {
       p.f1('u_cloudsOn', cloudsOn ? 1 : 0);
+      p.tex('u_cloudShadow', this.clouds.shadow).v4('u_cloudShadowRect', this.clouds.shadowRect).f2('u_cloudSlab', env.cloudBase, env.cloudTop);
       if (this.clouds.light) p.tex('u_cloudLight', this.clouds.light).tex('u_cloudDepth', this.clouds.depth);
     };
     const bindLit = (p: Program) => {
       this.atmosphere.bind(p);
       bindClouds(p);
-      p.tex('u_shadowMap', this.shadowMap).tex('u_terrainShadow', this.terrainShadow).m4('u_terrainShadowMat', this.terrainShadowMat).f1('u_shadowsOn', this.shadowsEnabled ? 1 : 0).f1('u_debugShadow', this.debugShadow);
+      p.tex('u_shadowMap', this.shadowMap).tex('u_terrainShadow', this.terrainShadow).m4('u_terrainShadowMat', this.terrainShadowMat).f1('u_shadowsOn', this.shadowsEnabled ? 1 : 0);
     };
 
     // terrain
