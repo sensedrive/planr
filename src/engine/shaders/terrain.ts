@@ -96,6 +96,9 @@ void main() {
   float green = clamp((albedo.g - max(albedo.r, albedo.b)) * 8.0, 0.0, 1.0);
   float dry = smoothstep(0.35, 0.75, fbm2(world.xz * 0.0045 + 5.3, 3));
   vec3 lum = vec3(dot(albedo, vec3(0.3, 0.59, 0.11)));
+  // dark greens are forest: no dry meadow patches there, a cooler conifer tint instead
+  float forest = 1.0 - smoothstep(0.07, 0.12, lum.x);
+  dry *= 1.0 - forest;
   vec3 natural = mix(mix(lum, albedo, 0.75) * vec3(1.02, 0.97, 0.85), lum * vec3(1.35, 1.12, 0.62), dry * 0.55);
   albedo = mix(albedo, natural, green);
   // rock on steep slopes (the geometric normal is smooth, so the boundary follows the landform)
@@ -110,6 +113,9 @@ void main() {
   float rock = smoothstep(0.27, 0.42, slope + (rockN - 0.5) * 0.14);
   float snowy = smoothstep(0.55, 0.75, dot(albedo, vec3(0.3, 0.5, 0.2)));
   vec3 rockCol = mix(vec3(0.16, 0.145, 0.13), vec3(0.3, 0.28, 0.25), strata) * (0.8 + 0.4 * rockN);
+  // where the landscape is already grey stone (limestone), keep its paler tone in the walls
+  float grey = 1.0 - clamp((max(albedo.r, max(albedo.g, albedo.b)) - min(albedo.r, min(albedo.g, albedo.b))) * 9.0, 0.0, 1.0);
+  rockCol = mix(rockCol, lum * vec3(1.0, 0.97, 0.92) * (0.75 + 0.45 * strata) * (0.85 + 0.3 * rockN), grey * smoothstep(0.08, 0.16, lum.x));
   albedo = mix(albedo, mix(rockCol, albedo, snowy * 0.6), rock);
   // detail: small-scale relief and colour breakup, fading with distance
   float near = 1.0 - smoothstep(80.0, 2500.0, dist);

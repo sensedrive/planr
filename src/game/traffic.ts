@@ -172,7 +172,8 @@ function maxTerrain(a: THREE.Vector3, b: THREE.Vector3, height: Height, width = 
 /** Left- or right-hand circuit with touch-and-go, on whichever side the terrain allows. */
 export function circuit(a: Airport, t: AircraftType, height: Height): Route | null {
   const L = a.length;
-  const pattern = t.cruise * 0.8;
+  // pattern speed capped so fast types turn inside the checked area (steep valley walls)
+  const pattern = Math.min(t.cruise * 0.8, 55);
   const final = t.approach;
   // runway direction and circuit side with the lowest terrain around the circuit and under the final
   const best = [1, -1]
@@ -181,7 +182,7 @@ export function circuit(a: Airport, t: AircraftType, height: Height): Route | nu
       const rp = (along: number, lateral: number) => runwayPoint(a, dir * along, dir * lateral);
       const corners = [rp(L / 2 + 900, 0), rp(L / 2 + 900, off), rp(-L / 2 - 1300, off), rp(-L / 2 - 1300, 0)];
       let top = -Infinity;
-      for (let i = 0; i < 4; i++) top = Math.max(top, maxTerrain(corners[i], corners[(i + 1) % 4], height, 350));
+      for (let i = 0; i < 4; i++) top = Math.max(top, maxTerrain(corners[i], corners[(i + 1) % 4], height, 600));
       const finalTop = maxTerrain(rp(-L / 2 - 1500, 0), rp(-L / 2, 0), height, 100);
       // a final over high ground rules the direction out
       const score = top + Math.max(0, finalTop - a.center.y - 40) * 10;
